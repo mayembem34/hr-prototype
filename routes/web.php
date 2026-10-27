@@ -48,7 +48,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/organizations/{organization}/applications', [LifecycleController::class, 'createApplication'])->name('recruitment.application.create');
     Route::post('/organizations/{organization}/applications/{application}', [LifecycleController::class, 'updateApplication'])->name('recruitment.application.update');
     Route::post('/organizations/{organization}/applications/{application}/interviews', [RecruitmentActionsController::class,'interview'])->name('recruitment.interview');
+    Route::post('/organizations/{organization}/applications/{application}/interviews/{interview}', [RecruitmentActionsController::class,'updateInterview'])->name('recruitment.interview.update');
     Route::post('/organizations/{organization}/applications/{application}/offers', [RecruitmentActionsController::class,'offer'])->name('recruitment.offer');
+    Route::post('/organizations/{organization}/applications/{application}/offers/{offer}', [RecruitmentActionsController::class,'updateOffer'])->name('recruitment.offer.update');
     Route::post('/organizations/{organization}/applications/{application}/hire', [RecruitmentActionsController::class,'hire'])->name('recruitment.hire');
     Route::get('/organizations/{organization}/my-lifecycle/notifications', [SelfLifecycleController::class,'notifications'])->name('lifecycle.notifications');
     Route::post('/organizations/{organization}/my-lifecycle/notifications/{notification}/read', [SelfLifecycleController::class,'readNotification'])->name('lifecycle.notification.read');
