@@ -14,6 +14,7 @@ use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\DevelopmentController;
 use App\Http\Controllers\DailyController;
 use App\Http\Controllers\TrainingController;
+use App\Http\Controllers\TrainingAssessmentController;
 
 Route::get('/invite/{token}', [InvitationController::class, 'form'])->middleware('throttle:10,1')->name('invitations.form');
 Route::post('/invite/{token}', [InvitationController::class, 'accept'])->middleware('throttle:10,1')->name('invitations.accept');
@@ -71,6 +72,14 @@ Route::middleware('auth')->group(function () {
     Route::post('/organizations/{organization}/training', [TrainingController::class,'create'])->name('training.create');
     Route::post('/organizations/{organization}/training/{course}/edit', [TrainingController::class,'update'])->name('training.update');
     Route::post('/organizations/{organization}/training/{course}/assign', [TrainingController::class,'assign'])->name('training.assign');
+    Route::get('/organizations/{organization}/training/{course}/assessment', [TrainingAssessmentController::class,'manage'])->name('assessment.manage');
+    Route::post('/organizations/{organization}/training/{course}/assessment', [TrainingAssessmentController::class,'create'])->name('assessment.create');
+    Route::post('/organizations/{organization}/training/{course}/assessment/questions', [TrainingAssessmentController::class,'addQuestion'])->name('assessment.question.add');
+    Route::delete('/organizations/{organization}/training/{course}/assessment/questions/{question}', [TrainingAssessmentController::class,'deleteQuestion'])->name('assessment.question.delete');
+    Route::post('/organizations/{organization}/training/{course}/assessment/publish', [TrainingAssessmentController::class,'publish'])->name('assessment.publish');
+    Route::get('/organizations/{organization}/training/assignments/{assignment}/assessment', [TrainingAssessmentController::class,'take'])->name('assessment.take');
+    Route::post('/organizations/{organization}/training/assignments/{assignment}/assessment', [TrainingAssessmentController::class,'submit'])->name('assessment.submit');
+    Route::get('/organizations/{organization}/training/assignments/{assignment}/assessment/results', [TrainingAssessmentController::class,'results'])->name('assessment.results');
     Route::get('/organizations/{organization}/my-training', [TrainingController::class,'mine'])->name('training.mine');
     Route::post('/organizations/{organization}/training/{course}/enroll', [TrainingController::class,'enroll'])->name('training.enroll');
     Route::post('/organizations/{organization}/training/assignments/{assignment}/decision', [TrainingController::class,'decide'])->name('training.decide');
