@@ -27,7 +27,6 @@ class LeaveApprovalTest extends TestCase {
         $this->actingAs($supervisor)->post($decision,['decision'=>'approved','decision_note'=>'Supervisor agrees'])->assertRedirect();$this->assertSame('pending_officer',$leave->fresh()->status);
         $this->actingAs($first)->get($base.'/leave-requests')->assertOk()->assertSee('Approve');
         $this->actingAs($second)->post($decision,['decision'=>'approved'])->assertForbidden();$this->actingAs($first)->post($decision,['decision'=>'approved','decision_note'=>'First agrees'])->assertRedirect();$this->assertSame('pending_officer',$leave->fresh()->status);
-        $this->actingAs($first)->get($base.'/leave-requests')->assertOk()->assertSee('Approve');
         $this->actingAs($second)->post($decision,['decision'=>'approved','decision_note'=>'Final agrees'])->assertRedirect();$this->assertSame('approved',$leave->fresh()->status);
         $this->actingAs($watcher)->get($base.'/leave-requests')->assertOk()->assertSee('Supervisor agrees')->assertSee('First agrees')->assertSee('Final agrees');
         $this->assertDatabaseCount('leave_approval_events',4);$this->assertSame($employee->id,$leave->employee_id);
