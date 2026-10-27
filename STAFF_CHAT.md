@@ -1,0 +1,5 @@
+# Staff chat
+
+Run `php artisan migrate` after deployment. Each organization has a shared conversation and direct conversations between members. The role permission list contains separate view and send permissions for organization chat and for direct messages. Organization administrators have these permissions; grant the appropriate permissions to staff roles to enable access. Users must also be active members of the organization, including platform administrators.
+
+The shared conversation is visible to all members granted its view permission. Direct messages are available only to the two participants; administrators do not automatically see other participants' direct messages. A member who is deactivated or loses direct-message viewing permission cannot receive new direct messages. Existing direct history remains visible to the other participant. Messages are text only, with the latest 50 shown per page. There are no attachments, editing, unread counts, notifications or real-time updates in this version; reload to see new messages.
