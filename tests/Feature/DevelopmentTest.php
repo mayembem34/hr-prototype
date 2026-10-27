@@ -11,7 +11,7 @@ use Tests\TestCase;
 class DevelopmentTest extends TestCase {
     use RefreshDatabase;
     private function employee(Organization $org,string $name,$unit=null): Employee { $e=new Employee(['employee_number'=>$name,'first_name'=>$name,'last_name'=>'Test','status'=>'active','unit_id'=>$unit?->id]); $e->organization_id=$org->id; $e->save(); return $e; }
-    private function member(Organization $org,array $keys,$unit): User { $u=User::factory()->create(); $org->users()->attach($u); $role=new Role(['name'=>'Scoped']); $role->organization_id=$org->id; $role->save(); foreach($keys as $key) $role->permissions()->attach(Permission::where('key',$key)->value('id'),['access_scope'=>'unit','unit_id'=>$unit->id]); DB::table('organization_role_user')->insert(['organization_id'=>$org->id,'role_id'=>$role->id,'user_id'=>$u->id]); return $u; }
+    private function member(Organization $org,array $keys,$unit): User { $u=User::factory()->create(); $org->users()->attach($u); $role=new Role(['name'=>'Scoped '.$u->id]); $role->organization_id=$org->id; $role->save(); foreach($keys as $key) $role->permissions()->attach(Permission::where('key',$key)->value('id'),['access_scope'=>'unit','unit_id'=>$unit->id]); DB::table('organization_role_user')->insert(['organization_id'=>$org->id,'role_id'=>$role->id,'user_id'=>$u->id]); return $u; }
     public function test_each_area_can_create_view_and_update_records(): void {
         $org=Organization::create(['name'=>'A']); $admin=User::factory()->create(); $org->users()->attach($admin,['is_admin'=>true]); $employee=$this->employee($org,'Alice');
         foreach (['performance','training','qualifications','career'] as $area) {
