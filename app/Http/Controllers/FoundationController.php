@@ -19,19 +19,23 @@ class FoundationController extends Controller {
         $this->publicPermission('session.login');
         $credentials = $request->validate(['email' => 'required|email', 'password' => 'required|string']);
         if (! Auth::attempt($credentials)) throw ValidationException::withMessages(['email' => 'The email or password is incorrect.']);
-        $request->session()->regenerate(); return redirect()->intended(route('home'));
+        $request->session()->regenerate();
+        $memberships = $request->user()->organizations()->get();
+        if ($memberships->count() === 1 && ! \App\Models\Employee::where('organization_id', $memberships->first()->id)->where('user_id', $request->user()->id)->exists()) return redirect()->route('self-profile.show', $memberships->first());
+        return redirect()->intended(route('home'));
     }
     public function logout(Request $request) { $this->authorizePermission($request, 'session.logout'); Auth::logout(); $request->session()->invalidate(); $request->session()->regenerateToken(); return redirect()->route('login'); }
     public function index(Request $request) {
         $this->authorizePermission($request, 'organizations.list');
+        $profileOrganizations = $request->user()->organizations()->orderBy('name')->get();
         $organizations = $request->user()->is_platform_admin ? Organization::orderBy('name')->get() : $request->user()->organizations()->orderBy('name')->get();
         $organizations = $organizations->filter(fn ($org) => $request->user()->hasPermission('organization.view', $org));
-        return view('home', compact('organizations'));
+        return view('home', compact('organizations', 'profileOrganizations'));
     }
     public function createOrganization(Request $request) {
         $this->authorizePermission($request, 'organizations.create');
         $data = $request->validate(['name' => 'required|string|max:255']);
-        $organization = Organization::create($data); return redirect()->route('organizations.show', $organization);
+        $organization = DB::transaction(function () use ($data) { $org = Organization::create($data); app(\App\Services\DefaultHrRole::class)->createIfMissing($org); return $org; }); return redirect()->route('organizations.show', $organization);
     }
     public function show(Request $request, Organization $organization) {
         $this->authorizePermission($request, 'organization.view', $organization);

@@ -3,6 +3,7 @@ use App\Http\Controllers\FoundationController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeeDocumentController;
+use App\Http\Controllers\SelfProfileController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/login', [FoundationController::class, 'loginForm'])->name('login');
@@ -20,9 +21,12 @@ Route::middleware('auth')->group(function () {
     Route::delete('/organizations/{organization}/roles/{role}', [RoleController::class, 'delete'])->name('roles.delete');
     Route::post('/organizations/{organization}/members', [RoleController::class, 'addMember'])->name('members.add');
     Route::post('/organizations/{organization}/members/{member}/roles', [RoleController::class, 'assign'])->name('assignments.update');
+    Route::get('/organizations/{organization}/my-profile', [SelfProfileController::class, 'show'])->name('self-profile.show');
+    Route::post('/organizations/{organization}/my-profile', [SelfProfileController::class, 'save'])->name('self-profile.save');
     Route::get('/organizations/{organization}/employees', [EmployeeController::class, 'index'])->name('employees.index');
     Route::post('/organizations/{organization}/employees', [EmployeeController::class, 'store'])->name('employees.store');
     Route::get('/organizations/{organization}/employees/{employee}', [EmployeeController::class, 'show'])->name('employees.show');
+    Route::post('/organizations/{organization}/employees/{employee}/account', [EmployeeController::class, 'linkAccount'])->name('employees.account');
     Route::post('/organizations/{organization}/employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update');
     Route::get('/organizations/{organization}/employees/{employee}/documents', [EmployeeDocumentController::class, 'index'])->name('documents.index');
     Route::post('/organizations/{organization}/employees/{employee}/documents', [EmployeeDocumentController::class, 'store'])->name('documents.store');
