@@ -16,6 +16,7 @@ use App\Http\Controllers\DailyController;
 use App\Http\Controllers\TrainingController;
 use App\Http\Controllers\TrainingAssessmentController;
 use App\Http\Controllers\OvertimeController;
+use App\Http\Controllers\StaffChatController;
 
 Route::get('/invite/{token}', [InvitationController::class, 'form'])->middleware('throttle:10,1')->name('invitations.form');
 Route::post('/invite/{token}', [InvitationController::class, 'accept'])->middleware('throttle:10,1')->name('invitations.accept');
@@ -34,6 +35,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/organizations/{organization}/roles/{role}', [RoleController::class, 'update'])->name('roles.update');
     Route::delete('/organizations/{organization}/roles/{role}', [RoleController::class, 'delete'])->name('roles.delete');
     Route::post('/organizations/{organization}/members/{member}/invitation', [InvitationController::class, 'resend'])->name('invitations.resend');
+    Route::get('/organizations/{organization}/staff-chat', [StaffChatController::class,'index'])->name('chat.index');
+    Route::post('/organizations/{organization}/staff-chat/messages', [StaffChatController::class,'sendGeneral'])->name('chat.general.send');
+    Route::get('/organizations/{organization}/staff-chat/direct/{peer}', [StaffChatController::class,'direct'])->name('chat.direct');
+    Route::post('/organizations/{organization}/staff-chat/direct/{peer}', [StaffChatController::class,'sendDirect'])->name('chat.direct.send');
     Route::get('/organizations/{organization}/my-attendance', [DailyController::class,'mine'])->name('attendance.mine');
     Route::post('/organizations/{organization}/attendance/clock-in', [DailyController::class,'clockIn'])->name('attendance.clock-in');
     Route::post('/organizations/{organization}/attendance/clock-out', [DailyController::class,'clockOut'])->name('attendance.clock-out');
