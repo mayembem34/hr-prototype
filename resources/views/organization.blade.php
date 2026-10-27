@@ -7,7 +7,7 @@
 @if($can('units.view'))
 <section><h2>Organization chart</h2><p>Units are shown in their reporting hierarchy. Assigning a unit head does not grant permissions.</p>
 @forelse($chart as $row) @php($chartUnit = $row['unit'])
-<div style="margin-left:{{ min($row['level'], 8) * 20 }}px; padding:6px; border-left:2px solid #dce4ee"><strong>{{ $chartUnit->name }}</strong>
+<div style="margin-left:{{ $row['level'] * 20 }}px; padding:6px; border-left:2px solid #dce4ee"><strong>{{ $chartUnit->name }}</strong>
 @if($can('units.heads.view') && $chartUnit->head_employee_id) @php($head = $headCandidates->firstWhere('id', $chartUnit->head_employee_id)) <small> — Head: {{ $head ? $head->first_name.' '.$head->last_name : 'Restricted' }}</small>@endif</div>
 @empty<p>No units yet.</p>@endforelse</section>
 <section><h2>Units</h2><p>Units can be nested within other units.</p>
