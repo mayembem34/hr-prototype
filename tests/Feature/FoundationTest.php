@@ -32,8 +32,8 @@ class FoundationTest extends TestCase {
         $this->actingAs($this->platformAdmin())->post('/organizations/'.$org->id.'/units/'.$top->id, ['name' => 'Top', 'parent_id' => $child->id])->assertSessionHasErrors('parent_id');
         $this->assertNull($top->fresh()->parent_id);
     }
-    public function test_admin_cannot_assign_organization_admin(): void {
-        $org = Organization::create(['name' => 'A']); $user = User::factory()->create(); $org->users()->attach($user->id, ['is_admin' => true]);
+    public function test_non_admin_cannot_assign_organization_admin(): void {
+        $org = Organization::create(['name' => 'A']); $user = User::factory()->create(); $org->users()->attach($user->id, ['is_admin' => false]);
         $this->actingAs($user)->post('/organizations/'.$org->id.'/admins', ['name' => 'Other', 'email' => 'other@example.com', 'password' => 'abcdefghijkl'])->assertForbidden();
         $this->assertDatabaseMissing('users', ['email' => 'other@example.com']);
     }

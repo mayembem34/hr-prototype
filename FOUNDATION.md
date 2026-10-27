@@ -1,6 +1,6 @@
-# Foundation: first slice
+# Foundation
 
-This branch adds platform administrators, organization administrators, organization records, nested units, branding settings and basic help. Custom roles and permission scopes, employees, documents, audit trails, organization switching for regular staff, and the remaining planned features are not implemented yet. Branding colors are stored but are not yet applied to the interface; a contrast-safe preview and defaults reset still need to be added. This is an early prototype, not production-ready.
+The prototype supports organizations, administrators, nested units, branding settings, custom organization roles and operation permissions. See [ROLES.md](ROLES.md) for permissions and their current scope. Employees, documents, audit trails, and unit-level and own-record access scopes are not yet implemented. Branding colors are saved but not applied to the interface. This is an early prototype, not production-ready.
 
 After configuring MySQL and installing dependencies as described in README, run:
 
@@ -11,6 +11,6 @@ php artisan hr:platform-admin admin@example.com "Platform Admin"
 php artisan serve
 ```
 
-The command prompts for a password. Sign in, create an organization, then assign an organization administrator. Existing accounts can be assigned by email without changing their passwords. Store real credentials outside source control.
+The command prompts for a password. Sign in, create an organization, then assign an organization administrator. Existing accounts retain their passwords. No public self-registration is enabled.
 
-Run tests with `php artisan test`. GitHub Actions runs them with SQLite. MySQL behavior requires separate testing. Organization administrators cannot currently remove or downgrade administrators; platform administrators can assign them. No public self-registration is enabled.
+Run tests with `php artisan test`. GitHub Actions runs them against SQLite and MySQL. Organization administrators can assign additional administrators; removal and downgrade of administrators are not yet available.
