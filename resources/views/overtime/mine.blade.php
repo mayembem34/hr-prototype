@@ -1,0 +1,6 @@
+@extends('layout')
+@section('content')
+<p><a href="{{ route('home') }}">Home</a> / {{ $organization->name }} / Overtime</p><h1>My overtime</h1><p>Enter times in UTC. The requested duration is the elapsed time between start and end.</p>
+@if(auth()->user()->hasPermission('overtime.self.create'))<section><h2>Request overtime</h2><form method="post" action="{{ route('overtime.submit',$organization) }}">@csrf<label>Start (UTC)<input type="datetime-local" name="starts_at" required></label><label>End (UTC)<input type="datetime-local" name="ends_at" required></label><label>Reason<textarea name="reason" maxlength="2000" required></textarea></label><button>Submit request</button></form></section>@endif
+<section><h2>My requests</h2>@forelse($requests as $entry)<article><h3>{{ $entry->starts_at }} — {{ $entry->ends_at }} UTC</h3><p>{{ $entry->minutes }} minutes · {{ ucfirst($entry->status) }}</p><p>{{ $entry->reason }}</p>@if($entry->decision_note)<p>Decision note: {{ $entry->decision_note }}</p>@endif @if($entry->status==='pending' && auth()->user()->hasPermission('overtime.self.cancel'))<form method="post" action="{{ route('overtime.cancel',[$organization,$entry->id]) }}">@csrf<button>Cancel request</button></form>@endif</article>@empty<p>No overtime requests.</p>@endforelse</section>
+@endsection

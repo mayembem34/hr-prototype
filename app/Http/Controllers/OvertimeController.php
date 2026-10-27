@@ -1,0 +1,30 @@
+<?php
+namespace App\Http\Controllers;
+use App\Models\Employee;
+use App\Models\Organization;
+use App\Services\DailyAlerts;
+use App\Services\EmployeeAccess;
+use Carbon\CarbonImmutable;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+class OvertimeController extends Controller {
+ private function self(Request $r,Organization $o,string $p): Employee {abort_unless($r->user()->hasPermission($p) && $o->users()->where('users.id',$r->user()->id)->exists(),403);return Employee::where('organization_id',$o->id)->where('user_id',$r->user()->id)->firstOrFail();}
+ private function event(Organization $o,int $id,int $actor,string $action,?string $note=null): void {DB::table('overtime_events')->insert(['organization_id'=>$o->id,'overtime_request_id'=>$id,'actor_id'=>$actor,'action'=>$action,'note'=>$note,'created_at'=>now(),'updated_at'=>now()]);}
+ public function mine(Request $r,Organization $organization) {$e=$this->self($r,$organization,'overtime.self.view');$requests=DB::table('overtime_requests')->where('organization_id',$organization->id)->where('employee_id',$e->id)->orderByDesc('id')->get();return view('overtime.mine',compact('organization','requests'));}
+ public function submit(Request $r,Organization $organization) {
+  $this->self($r,$organization,'overtime.self.create');$data=$r->validate(['starts_at'=>'required|date_format:Y-m-d\TH:i','ends_at'=>'required|date_format:Y-m-d\TH:i|after:starts_at','reason'=>'required|string|max:2000']);
+  $start=CarbonImmutable::createFromFormat('Y-m-d\TH:i',$data['starts_at'],'UTC')->second(0);$end=CarbonImmutable::createFromFormat('Y-m-d\TH:i',$data['ends_at'],'UTC')->second(0);$minutes=(int)($end->timestamp-$start->timestamp)/60;if($minutes>1440)throw ValidationException::withMessages(['ends_at'=>'An overtime request cannot exceed 24 hours.']);
+  DB::transaction(function()use($r,$organization,$data,$start,$end,$minutes){Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();$e=$this->self($r,$organization,'overtime.self.create');if($e->status!=='active')throw ValidationException::withMessages(['reason'=>'Only active employees may request overtime.']);$overlap=DB::table('overtime_requests')->where('organization_id',$organization->id)->where('employee_id',$e->id)->whereIn('status',['pending','approved'])->where('starts_at','<',$end->format('Y-m-d H:i:s'))->where('ends_at','>',$start->format('Y-m-d H:i:s'))->exists();if($overlap)throw ValidationException::withMessages(['starts_at'=>'This overlaps a pending or approved overtime request.']);$id=DB::table('overtime_requests')->insertGetId(['organization_id'=>$organization->id,'employee_id'=>$e->id,'starts_at'=>$start->format('Y-m-d H:i:s'),'ends_at'=>$end->format('Y-m-d H:i:s'),'minutes'=>$minutes,'reason'=>$data['reason'],'status'=>'pending','created_at'=>now(),'updated_at'=>now()]);$this->event($organization,$id,$r->user()->id,'submitted');if($e->manager_id){$manager=Employee::where('organization_id',$organization->id)->find($e->manager_id);if($manager)app(DailyAlerts::class)->send($organization->id,$manager->user_id,'An overtime request is awaiting review.');}});return back()->with('status','Overtime request submitted.');
+ }
+ public function cancel(Request $r,Organization $organization,int $overtime) {
+  DB::transaction(function()use($r,$organization,$overtime){Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();$e=$this->self($r,$organization,'overtime.self.cancel');$entry=DB::table('overtime_requests')->where('organization_id',$organization->id)->where('employee_id',$e->id)->where('id',$overtime)->lockForUpdate()->first();abort_unless($entry,404);abort_unless($entry->status==='pending',422);DB::table('overtime_requests')->where('id',$entry->id)->update(['status'=>'cancelled','updated_at'=>now()]);$this->event($organization,$entry->id,$r->user()->id,'cancelled');});return back()->with('status','Overtime request cancelled.');
+ }
+ public function index(Request $r,Organization $organization) {
+  abort_unless($r->user()->hasPermission('overtime.requests.view',$organization),403);$ids=app(EmployeeAccess::class)->filter(Employee::query(),$r->user(),$organization,'overtime.requests.view')->select('employees.id');$requests=DB::table('overtime_requests as o')->join('employees as e','e.id','=','o.employee_id')->where('o.organization_id',$organization->id)->where('e.organization_id',$organization->id)->whereIn('o.employee_id',$ids)->select('o.*','e.first_name','e.last_name')->orderByDesc('o.id')->get();$employees=Employee::where('organization_id',$organization->id)->whereIn('id',$requests->pluck('employee_id'))->get()->keyBy('id');return view('overtime.index',compact('organization','requests','employees'));
+ }
+ public function decide(Request $r,Organization $organization,int $overtime) {
+  $data=$r->validate(['decision'=>['required',Rule::in(['approved','rejected'])],'note'=>'nullable|string|max:2000']);DB::transaction(function()use($r,$organization,$overtime,$data){Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();$entry=DB::table('overtime_requests')->where('organization_id',$organization->id)->where('id',$overtime)->lockForUpdate()->first();abort_unless($entry,404);$e=Employee::where('organization_id',$organization->id)->findOrFail($entry->employee_id);abort_unless(app(EmployeeAccess::class)->allows($r->user(),$organization,'overtime.requests.decide',$e),403);abort_if((int)$e->user_id===(int)$r->user()->id,403);abort_unless($entry->status==='pending',422);DB::table('overtime_requests')->where('id',$entry->id)->update(['status'=>$data['decision'],'reviewer_id'=>$r->user()->id,'decision_note'=>$data['note']??null,'decided_at'=>now(),'updated_at'=>now()]);$this->event($organization,$entry->id,$r->user()->id,$data['decision'],$data['note']??null);app(DailyAlerts::class)->send($organization->id,$e->user_id,'Your overtime request was '.$data['decision'].'.');});return back()->with('status','Overtime decision recorded.');
+ }
+}

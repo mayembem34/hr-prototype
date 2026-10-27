@@ -15,6 +15,7 @@ use App\Http\Controllers\DevelopmentController;
 use App\Http\Controllers\DailyController;
 use App\Http\Controllers\TrainingController;
 use App\Http\Controllers\TrainingAssessmentController;
+use App\Http\Controllers\OvertimeController;
 
 Route::get('/invite/{token}', [InvitationController::class, 'form'])->middleware('throttle:10,1')->name('invitations.form');
 Route::post('/invite/{token}', [InvitationController::class, 'accept'])->middleware('throttle:10,1')->name('invitations.accept');
@@ -41,6 +42,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/organizations/{organization}/attendance/{entry}', [DailyController::class,'correct'])->name('attendance.correct');
     Route::get('/organizations/{organization}/daily-notifications', [DailyController::class,'notifications'])->name('daily.notifications');
     Route::post('/organizations/{organization}/daily-notifications/{notification}/read', [DailyController::class,'read'])->name('daily.notifications.read');
+    Route::get('/organizations/{organization}/my-overtime', [OvertimeController::class,'mine'])->name('overtime.mine');
+    Route::post('/organizations/{organization}/my-overtime', [OvertimeController::class,'submit'])->name('overtime.submit');
+    Route::post('/organizations/{organization}/my-overtime/{overtime}/cancel', [OvertimeController::class,'cancel'])->name('overtime.cancel');
+    Route::get('/organizations/{organization}/overtime', [OvertimeController::class,'index'])->name('overtime.index');
+    Route::post('/organizations/{organization}/overtime/{overtime}/decision', [OvertimeController::class,'decide'])->name('overtime.decide');
     Route::get('/organizations/{organization}/my-leave', [LeaveController::class, 'mine'])->name('leave.mine');
     Route::post('/organizations/{organization}/my-leave', [LeaveController::class, 'requestLeave'])->name('leave.request');
     Route::post('/organizations/{organization}/my-leave/{leave}/cancel', [LeaveController::class, 'cancel'])->name('leave.cancel');
