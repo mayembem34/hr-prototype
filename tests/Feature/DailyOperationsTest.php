@@ -40,7 +40,7 @@ class DailyOperationsTest extends TestCase {
     public function test_leave_request_approval_and_allowance_are_enforced(): void {
         $org=Organization::create(['name'=>'A']);$admin=$this->admin($org);$user=$this->member($org);$employee=$this->employee($org,$user);$supervisor=$this->employee($org,$admin);$employee->manager_id=$supervisor->id;$employee->save();
         $this->actingAs($admin)->post('/organizations/'.$org->id.'/leave-types',['name'=>'Annual','annual_days'=>5])->assertRedirect();$type=LeaveType::where('organization_id',$org->id)->firstOrFail();
-        $this->actingAs($user)->post('/organizations/'.$org->id.'/my-leave',['leave_type_id'=>$type->id,'start_date'=>'2027-01-01','end_date'=>'2027-01-03'])->assertRedirect();
+        $this->actingAs($user)->post('/organizations/'.$org->id.'/my-leave',['leave_type_id'=>$type->id,'start_date'=>'2027-01-04','end_date'=>'2027-01-06'])->assertRedirect();
         $leave=LeaveRequest::where('employee_id',$employee->id)->firstOrFail();$this->assertSame(3,$leave->days);
         $this->actingAs($user)->post('/organizations/'.$org->id.'/my-leave',['leave_type_id'=>$type->id,'start_date'=>'2027-02-01','end_date'=>'2027-02-03'])->assertSessionHasErrors('end_date');
         $this->actingAs($admin)->post('/organizations/'.$org->id.'/leave-requests/'.$leave->id.'/decision',['decision'=>'approved'])->assertRedirect();$this->assertSame('approved',$leave->fresh()->status);

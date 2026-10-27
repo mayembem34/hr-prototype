@@ -7,6 +7,7 @@ use App\Http\Controllers\SelfProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\LeaveController;
+use App\Http\Controllers\HolidayController;
 
 Route::get('/invite/{token}', [InvitationController::class, 'form'])->middleware('throttle:10,1')->name('invitations.form');
 Route::post('/invite/{token}', [InvitationController::class, 'accept'])->middleware('throttle:10,1')->name('invitations.accept');
@@ -28,6 +29,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/organizations/{organization}/my-leave', [LeaveController::class, 'mine'])->name('leave.mine');
     Route::post('/organizations/{organization}/my-leave', [LeaveController::class, 'requestLeave'])->name('leave.request');
     Route::post('/organizations/{organization}/my-leave/{leave}/cancel', [LeaveController::class, 'cancel'])->name('leave.cancel');
+    Route::get('/organizations/{organization}/holidays', [HolidayController::class, 'index'])->name('holidays.index');
+    Route::post('/organizations/{organization}/holidays', [HolidayController::class, 'store'])->name('holidays.store');
+    Route::post('/organizations/{organization}/holidays/{holiday}', [HolidayController::class, 'update'])->name('holidays.update');
+    Route::delete('/organizations/{organization}/holidays/{holiday}', [HolidayController::class, 'delete'])->name('holidays.delete');
     Route::get('/organizations/{organization}/leave-types', [LeaveController::class, 'manage'])->name('leave.types');
     Route::post('/organizations/{organization}/leave-types', [LeaveController::class, 'createType'])->name('leave.types.create');
     Route::post('/organizations/{organization}/leave-types/{type}', [LeaveController::class, 'updateType'])->name('leave.types.update');

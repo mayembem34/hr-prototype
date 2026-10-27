@@ -17,10 +17,18 @@ class LeaveController extends Controller {
         return Employee::where('organization_id',$org->id)->where('user_id',$request->user()->id)->firstOrFail();
     }
     private function op(Request $request,Organization $org,string $permission): void { abort_unless($request->user()->hasPermission($permission,$org),403); }
-    private function dateInfo(array $data): array {
+    private function dateInfo(Organization $organization,array $data): array {
         $start=CarbonImmutable::parse($data['start_date'])->startOfDay(); $end=CarbonImmutable::parse($data['end_date'])->startOfDay();
         if ($start->year !== $end->year) throw ValidationException::withMessages(['end_date'=>'Submit separate requests for each calendar year.']);
-        return [$start,$end,(int)$start->diffInDays($end)+1];
+        $holidays=\App\Models\OrganizationHoliday::where('organization_id',$organization->id)
+            ->whereBetween('date',[$start->toDateString(),$end->toDateString()])->pluck('date')->all();
+        $holidayDates=array_fill_keys($holidays,true);
+        $days=0;
+        for ($date=$start; $date->lessThanOrEqualTo($end); $date=$date->addDay()) {
+            if ($date->dayOfWeekIso <= 5 && ! isset($holidayDates[$date->toDateString()])) $days++;
+        }
+        if ($days===0) throw ValidationException::withMessages(['end_date'=>'The selected dates must include at least one weekday that is not an organization holiday.']);
+        return [$start,$end,$days];
     }
     private function consumed(Organization $org,Employee $employee,LeaveType $type,int $year): int {
         return (int) LeaveRequest::where('organization_id',$org->id)->where('employee_id',$employee->id)->where('leave_type_id',$type->id)->whereYear('start_date',$year)->whereIn('status',['pending_supervisor','pending_officer','approved'])->sum('days');
@@ -34,10 +42,10 @@ class LeaveController extends Controller {
     public function requestLeave(Request $request,Organization $organization) {
         $employee=$this->self($request,$organization,'leave.self.request');
         $data=$request->validate(['leave_type_id'=>['required','integer',Rule::exists('leave_types','id')->where('organization_id',$organization->id)->where('active',true)],'start_date'=>'required|date_format:Y-m-d','end_date'=>'required|date_format:Y-m-d|after_or_equal:start_date','reason'=>'nullable|string|max:2000']);
-        [$start,$end,$days]=$this->dateInfo($data);
-        DB::transaction(function () use ($request,$organization,$employee,$data,$start,$end,$days) {
+        DB::transaction(function () use ($request,$organization,$employee,$data) {
             Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();
             $employee=$this->self($request,$organization,'leave.self.request');
+            [$start,$end,$days]=$this->dateInfo($organization,$data);
             $type=LeaveType::where('organization_id',$organization->id)->whereKey($data['leave_type_id'])->where('active',true)->firstOrFail();
             if ($this->consumed($organization,$employee,$type,$start->year)+$days > $type->annual_days) throw ValidationException::withMessages(['end_date'=>'The request exceeds the available annual allowance.']);
             if (LeaveRequest::where('organization_id',$organization->id)->where('employee_id',$employee->id)->whereIn('status',['pending_supervisor','pending_officer','approved'])->where('start_date','<=',$end->toDateString())->where('end_date','>=',$start->toDateString())->exists()) throw ValidationException::withMessages(['start_date'=>'This request overlaps an existing pending or approved request.']);
