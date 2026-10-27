@@ -23,9 +23,11 @@ class LeaveApprovalTest extends TestCase {
         $this->grant($org,$supervisor,['leave.requests.supervisor_approve']);$this->grant($org,$first,['leave.requests.officer_approve']);$this->grant($org,$second,['leave.requests.officer_approve']);$this->grant($org,$watcher,['leave.requests.view_all']);
         $base='/organizations/'.$org->id; $this->actingAs($admin)->post($base.'/leave-officers',['user_id'=>$second->id,'position'=>2])->assertRedirect();$this->actingAs($admin)->post($base.'/leave-officers',['user_id'=>$first->id,'position'=>1])->assertRedirect();
         $leave=$this->requestLeave($org,$staff,$this->type($org));$decision=$base.'/leave-requests/'.$leave->id.'/decision';
-        $this->assertSame('pending_supervisor',$leave->fresh()->status);$this->actingAs($first)->post($decision,['decision'=>'approved'])->assertForbidden();
+        $this->assertSame('pending_supervisor',$leave->fresh()->status);$this->actingAs($supervisor)->get($base.'/leave-requests')->assertOk()->assertSee('Approve');$this->actingAs($first)->post($decision,['decision'=>'approved'])->assertForbidden();
         $this->actingAs($supervisor)->post($decision,['decision'=>'approved','decision_note'=>'Supervisor agrees'])->assertRedirect();$this->assertSame('pending_officer',$leave->fresh()->status);
+        $this->actingAs($first)->get($base.'/leave-requests')->assertOk()->assertSee('Approve');
         $this->actingAs($second)->post($decision,['decision'=>'approved'])->assertForbidden();$this->actingAs($first)->post($decision,['decision'=>'approved','decision_note'=>'First agrees'])->assertRedirect();$this->assertSame('pending_officer',$leave->fresh()->status);
+        $this->actingAs($first)->get($base.'/leave-requests')->assertOk()->assertSee('Approve');
         $this->actingAs($second)->post($decision,['decision'=>'approved','decision_note'=>'Final agrees'])->assertRedirect();$this->assertSame('approved',$leave->fresh()->status);
         $this->actingAs($watcher)->get($base.'/leave-requests')->assertOk()->assertSee('Supervisor agrees')->assertSee('First agrees')->assertSee('Final agrees');
         $this->assertDatabaseCount('leave_approval_events',4);$this->assertSame($employee->id,$leave->employee_id);
