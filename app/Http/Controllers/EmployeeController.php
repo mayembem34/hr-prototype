@@ -10,7 +10,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class EmployeeController extends Controller {
-    private const FIELDS = ['employee_number','first_name','last_name','email','phone','job_title','employment_type','start_date','status','unit_id','manager_id','user_id'];
+    private const FIELDS = ['employee_number','first_name','last_name','email','phone','job_title','employment_type','start_date','status','unit_id','manager_id','user_id','date_of_birth','address','emergency_contact_name','emergency_contact_phone'];
     private function authorizeEmployee(Request $request, Organization $organization, string $permission): void {
         abort_unless($request->user()->hasPermission($permission, $organization), 403);
     }
@@ -21,6 +21,7 @@ class EmployeeController extends Controller {
         return $request->validate([
             'employee_number' => ['required','string','max:80',Rule::unique('employees')->where('organization_id', $organization->id)->ignore($employee?->id)],
             'first_name' => 'required|string|max:255', 'last_name' => 'required|string|max:255',
+            'date_of_birth'=>'nullable|date_format:Y-m-d|before_or_equal:today', 'address'=>'nullable|string|max:500', 'emergency_contact_name'=>'nullable|string|max:255', 'emergency_contact_phone'=>'nullable|string|max:80',
             'email' => 'nullable|email|max:255', 'phone' => 'nullable|string|max:80', 'job_title' => 'nullable|string|max:255',
             'employment_type' => 'nullable|string|max:80', 'start_date' => 'nullable|date_format:Y-m-d',
             'status' => ['required', Rule::in(['active','on_leave','suspended','left'])],

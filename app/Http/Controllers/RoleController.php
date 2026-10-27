@@ -68,9 +68,10 @@ class RoleController extends Controller {
     public function addMember(Request $request, Organization $organization) {
         $this->authorizeOp($request, $organization, 'members.add');
         $data = $request->validate(['name' => 'required|string|max:255', 'email' => 'required|email|max:255', 'password' => 'nullable|string|min:12']);
-        DB::transaction(function () use ($data, $organization) {
+        DB::transaction(function () use ($data, $organization, $request) {
             $user = User::where('email', $data['email'])->first();
             if (! $user) {
+                abort_unless($request->user()->hasPermission('members.accounts.create', $organization), 403);
                 if (empty($data['password'])) throw ValidationException::withMessages(['password' => 'A password is required for a new user.']);
                 $user = User::create(['name' => $data['name'], 'email' => $data['email'], 'password' => $data['password']]);
             }

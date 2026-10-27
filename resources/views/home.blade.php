@@ -1,5 +1,7 @@
 @extends('layout')
 @section('content')
-<h1>Organizations</h1><p>Choose an organization to manage its foundation.</p><section><ul>@forelse($organizations as $organization)<li><a href="{{ route('organizations.show', $organization) }}">{{ $organization->name }}</a></li>@empty<li>No organizations available.</li>@endforelse</ul></section>
+<h1>Organizations</h1>
+@if($profileOrganizations->isNotEmpty())<section><h2>My employee profile</h2><p>Complete or update your profile for each organization you belong to.</p><ul>@foreach($profileOrganizations as $profileOrganization)<li><a href="{{ route('self-profile.show', $profileOrganization) }}">{{ $profileOrganization->name }} — my profile</a></li>@endforeach</ul></section>@endif
+<section><h2>Organization workspaces</h2><ul>@forelse($organizations as $organization)<li><a href="{{ route('organizations.show', $organization) }}">{{ $organization->name }}</a></li>@empty<li>No management workspaces are available.</li>@endforelse</ul></section>
 @if(auth()->user()->hasPermission('organizations.create'))<section><h2>Create an organization</h2><form method="post" action="{{ route('organizations.create') }}">@csrf<label>Name<input name="name" maxlength="255" required></label><button>Create organization</button></form></section>@endif
 @endsection
