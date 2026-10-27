@@ -14,7 +14,7 @@ class User extends Authenticatable {
         if (! $permission) return false;
         if ($permission->scope === 'session') return true;
         if ($permission->scope === 'public') return true;
-        if ($permission->scope === 'platform') return $this->is_platform_admin;
+        if ($permission->scope === 'platform') return (bool) $this->is_platform_admin;
         if (! $organization) return false;
         if ($this->is_platform_admin) return true;
         $member = $this->organizations()->where('organizations.id', $organization->id)->first();
