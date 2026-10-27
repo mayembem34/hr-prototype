@@ -36,4 +36,10 @@ class LifecycleCompletionTest extends TestCase {
   $this->actingAs($platform)->post($base,['employee_id'=>$e->id,'kind'=>'offboarding'])->assertRedirect();$case=LifecycleCase::where('kind','offboarding')->firstOrFail();foreach($case->tasks as $task)$this->post($base.'/'.$case->id.'/tasks/'.$task->id,['completed'=>1])->assertRedirect();$this->post($base.'/'.$case->id.'/complete',[])->assertSessionHasErrors('case');
   $this->assertSame('active',$e->fresh()->status);$this->assertTrue($admin->fresh()->organizations()->where('organizations.id',$org->id)->exists());
  }
+ public function test_inactive_membership_cannot_accept_an_old_invitation(): void {
+  $org=Organization::create(['name'=>'A']);$user=User::factory()->create();$org->users()->attach($user);$user->must_set_password=true;$user->save();$token=str_repeat('q',64);
+  DB::table('account_invitations')->insert(['organization_id'=>$org->id,'user_id'=>$user->id,'token_hash'=>hash('sha256',$token),'expires_at'=>now()->addHours(2),'created_at'=>now(),'updated_at'=>now()]);
+  DB::table('organization_user')->where('organization_id',$org->id)->where('user_id',$user->id)->update(['is_active'=>false]);
+  $this->post('/invite/'.$token,['password'=>'secure-password-123','password_confirmation'=>'secure-password-123'])->assertNotFound();$this->assertTrue((bool)$user->fresh()->must_set_password);
+ }
 }
