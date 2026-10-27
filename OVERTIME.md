@@ -1,0 +1,5 @@
+# Overtime
+
+Run `php artisan migrate` after deployment. Employees with an active membership and linked active employee profile may submit an overtime request in UTC, up to 24 hours per request. Requests may span midnight; elapsed minutes are recorded without automatic break deductions. Pending and approved requests cannot overlap. An employee can cancel a pending request. A user with the scoped overtime decision permission may approve or reject a pending request, but may not decide their own; a separate view permission controls the review list. The employee receives an in-system decision notification and an assigned supervisor receives a submission notification. Every action is recorded in overtime events.
+
+Overtime requests are manual records and may describe planned or worked time. They are not automatically reconciled with attendance, work schedules, holidays or break rules. The system does not calculate eligibility, pay, rates or legal limits; an approved request is not proof of hours worked. No multi-stage approvals, exports or email notifications are included. Configure roles to grant the scoped review and decision permissions.
