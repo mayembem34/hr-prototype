@@ -20,7 +20,12 @@ class LeaveController extends Controller {
     private function dateInfo(array $data): array {
         $start=CarbonImmutable::parse($data['start_date'])->startOfDay(); $end=CarbonImmutable::parse($data['end_date'])->startOfDay();
         if ($start->year !== $end->year) throw ValidationException::withMessages(['end_date'=>'Submit separate requests for each calendar year.']);
-        return [$start,$end,(int)$start->diffInDays($end)+1];
+        $days=0;
+        for ($date=$start; $date->lessThanOrEqualTo($end); $date=$date->addDay()) {
+            if ($date->dayOfWeekIso <= 5) $days++;
+        }
+        if ($days===0) throw ValidationException::withMessages(['end_date'=>'The selected dates must include at least one weekday.']);
+        return [$start,$end,$days];
     }
     private function consumed(Organization $org,Employee $employee,LeaveType $type,int $year): int {
         return (int) LeaveRequest::where('organization_id',$org->id)->where('employee_id',$employee->id)->where('leave_type_id',$type->id)->whereYear('start_date',$year)->whereIn('status',['pending_supervisor','pending_officer','approved'])->sum('days');
