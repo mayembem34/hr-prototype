@@ -1,0 +1,73 @@
+<?php
+namespace App\Http\Controllers;
+use App\Models\Employee;
+use App\Models\Organization;
+use App\Services\DailyAlerts;
+use App\Services\EmployeeAccess;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use Throwable;
+
+class TrainingController extends Controller {
+ private function permit(Request $r,Organization $o,string $p): void {abort_unless($r->user()->hasPermission($p,$o),403);}
+ private function self(Request $r,Organization $o,string $p): Employee {abort_unless($r->user()->hasPermission($p) && $o->users()->where('users.id',$r->user()->id)->exists(),403);return Employee::where('organization_id',$o->id)->where('user_id',$r->user()->id)->firstOrFail();}
+ private function course(Organization $o,int $id) {return DB::table('training_courses')->where('organization_id',$o->id)->where('id',$id)->first() ?? abort(404);}
+ private function assignment(Organization $o,int $id) {return DB::table('training_assignments')->where('organization_id',$o->id)->where('id',$id)->first() ?? abort(404);}
+ private function allowed(Request $r,Organization $o,$a,string $p): void {$e=Employee::where('organization_id',$o->id)->findOrFail($a->employee_id);abort_unless(app(EmployeeAccess::class)->allows($r->user(),$o,$p,$e),403);}
+ private function event(Organization $o,int $id,Request $r,string $action,?string $note=null): void {DB::table('training_events')->insert(['organization_id'=>$o->id,'assignment_id'=>$id,'actor_id'=>$r->user()->id,'action'=>$action,'note'=>$note,'created_at'=>now(),'updated_at'=>now()]);}
+ private function courseFields(Request $r): array {return $r->validate(['title'=>'required|string|max:255','description'=>'nullable|string|max:10000','provider'=>'nullable|string|max:255','delivery_url'=>'nullable|url:http,https|max:2048','active'=>'required|boolean']);}
+ public function index(Request $r,Organization $organization) {
+  $this->permit($r,$organization,'training.courses.view');
+  $courses=DB::table('training_courses')->where('organization_id',$organization->id)->orderBy('title')->get();
+  $employees=app(EmployeeAccess::class)->filter(Employee::query(),$r->user(),$organization,'training.assignments.create')->where('status','active')->orderBy('last_name')->get();
+  $units=$r->user()->hasPermission('units.view',$organization)?$organization->units()->orderBy('name')->get():collect();
+  $ids=app(EmployeeAccess::class)->filter(Employee::query(),$r->user(),$organization,'training.assignments.view')->select('employees.id');
+  $assignments=DB::table('training_assignments as a')->join('employees as e','e.id','=','a.employee_id')->join('training_courses as c','c.id','=','a.course_id')->where('a.organization_id',$organization->id)->where('e.organization_id',$organization->id)->where('c.organization_id',$organization->id)->whereIn('a.employee_id',$ids)->select('a.*','e.first_name','e.last_name','c.title')->orderByDesc('a.id')->get();
+  $subjectEmployees=Employee::where('organization_id',$organization->id)->whereIn('id',$assignments->pluck('employee_id'))->get()->keyBy('id');
+  $certificateIds=$assignments->filter(fn($a)=>($e=$subjectEmployees->get($a->employee_id)) && app(EmployeeAccess::class)->allows($r->user(),$organization,'training.certificates.view',$e))->pluck('id');
+  $certificates=DB::table('training_certificates')->where('organization_id',$organization->id)->whereIn('assignment_id',$certificateIds)->get()->groupBy('assignment_id');
+  $reportIds=app(EmployeeAccess::class)->filter(Employee::query(),$r->user(),$organization,'training.reports.view')->select('employees.id');
+  $report=DB::table('training_assignments')->where('organization_id',$organization->id)->whereIn('employee_id',$reportIds)->select('status',DB::raw('count(*) as total'))->groupBy('status')->get();
+  return view('training.index',compact('organization','courses','employees','units','assignments','subjectEmployees','report','certificates'));
+ }
+ public function create(Request $r,Organization $organization) {$this->permit($r,$organization,'training.courses.create');$data=$this->courseFields($r);DB::table('training_courses')->insert(array_merge($data,['organization_id'=>$organization->id,'created_at'=>now(),'updated_at'=>now()]));return back()->with('status','Training created.');}
+ public function update(Request $r,Organization $organization,int $course) {$this->permit($r,$organization,'training.courses.update');$this->course($organization,$course);$data=$this->courseFields($r);DB::table('training_courses')->where('organization_id',$organization->id)->where('id',$course)->update(array_merge($data,['updated_at'=>now()]));return back()->with('status','Training updated.');}
+ public function assign(Request $r,Organization $organization,int $course) {
+  $this->permit($r,$organization,'training.assignments.create');
+  $data=$r->validate(['target'=>['required',Rule::in(['individual','unit','organization'])],'employee_ids'=>'required_if:target,individual|array','employee_ids.*'=>['integer','distinct',Rule::exists('employees','id')->where('organization_id',$organization->id)->where('status','active')],'unit_id'=>['required_if:target,unit','nullable','integer',Rule::exists('units','id')->where('organization_id',$organization->id)],'include_nested'=>'nullable|boolean','due_date'=>'nullable|date_format:Y-m-d']);
+  DB::transaction(function()use($r,$organization,$course,$data){Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();$c=$this->course($organization,$course);abort_unless($c->active,422);
+   $query=Employee::where('organization_id',$organization->id)->where('status','active');
+   if($data['target']==='organization') abort_unless($r->user()->hasOrganizationPermission('training.assignments.create',$organization),403);
+   elseif($data['target']==='individual') $query->whereIn('id',$data['employee_ids']);
+   else {abort_unless($r->user()->hasPermission('units.view',$organization),403);$units=DB::table('units')->where('organization_id',$organization->id)->get(['id','parent_id']);$ids=[(int)$data['unit_id']];if(!empty($data['include_nested'])){do{$count=count($ids);foreach($units as $u)if($u->parent_id && in_array((int)$u->parent_id,$ids,true) && !in_array((int)$u->id,$ids,true))$ids[]=(int)$u->id;}while(count($ids)>$count);} $query->whereIn('unit_id',$ids);}
+   $targets=$query->get();if($targets->isEmpty())throw ValidationException::withMessages(['target'=>'No active employees match the selection.']);
+   foreach($targets as $e)abort_unless(app(EmployeeAccess::class)->allows($r->user(),$organization,'training.assignments.create',$e),403);
+   foreach($targets as $e){if(DB::table('training_assignments')->where('organization_id',$organization->id)->where('course_id',$course)->where('employee_id',$e->id)->exists())continue;$id=DB::table('training_assignments')->insertGetId(['organization_id'=>$organization->id,'course_id'=>$course,'employee_id'=>$e->id,'status'=>'assigned','due_date'=>$data['due_date']??null,'assigned_by'=>$r->user()->id,'created_at'=>now(),'updated_at'=>now()]);$this->event($organization,$id,$r,'assigned');app(DailyAlerts::class)->send($organization->id,$e->user_id,'You have been assigned a training course: '.$c->title);}
+  });return back()->with('status','Training assigned to the selected employees. Existing assignments were preserved.');
+ }
+ public function mine(Request $r,Organization $organization) {
+  $e=$this->self($r,$organization,'training.self.view');$courses=DB::table('training_courses')->where('organization_id',$organization->id)->where('active',true)->orderBy('title')->get();
+  $assignments=DB::table('training_assignments as a')->join('training_courses as c','c.id','=','a.course_id')->where('a.organization_id',$organization->id)->where('c.organization_id',$organization->id)->where('a.employee_id',$e->id)->select('a.*','c.title','c.description','c.delivery_url')->orderByDesc('a.id')->get();
+  $certificates=DB::table('training_certificates')->where('organization_id',$organization->id)->whereIn('assignment_id',$assignments->pluck('id'))->get()->groupBy('assignment_id');return view('training.mine',compact('organization','courses','assignments','certificates'));
+ }
+ public function enroll(Request $r,Organization $organization,int $course) {
+  $this->self($r,$organization,'training.self.enroll');DB::transaction(function()use($r,$organization,$course){Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();$e=$this->self($r,$organization,'training.self.enroll');$c=$this->course($organization,$course);abort_unless($c->active && $e->status==='active',422);if(DB::table('training_assignments')->where('organization_id',$organization->id)->where('course_id',$course)->where('employee_id',$e->id)->exists())throw ValidationException::withMessages(['course'=>'An assignment or request already exists.']);$id=DB::table('training_assignments')->insertGetId(['organization_id'=>$organization->id,'course_id'=>$course,'employee_id'=>$e->id,'status'=>'requested','created_at'=>now(),'updated_at'=>now()]);$this->event($organization,$id,$r,'requested');if($e->manager_id){$manager=Employee::where('organization_id',$organization->id)->find($e->manager_id);if($manager)app(DailyAlerts::class)->send($organization->id,$manager->user_id,'A training enrolment request is awaiting review.');}});return back()->with('status','Enrolment requested.');
+ }
+ public function decide(Request $r,Organization $organization,int $assignment) {
+  $data=$r->validate(['decision'=>['required',Rule::in(['approved','rejected'])],'note'=>'nullable|string|max:2000']);DB::transaction(function()use($r,$organization,$assignment,$data){Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();$a=$this->assignment($organization,$assignment);$this->allowed($r,$organization,$a,'training.assignments.approve');$e=Employee::where('organization_id',$organization->id)->findOrFail($a->employee_id);abort_if((int)$e->user_id===(int)$r->user()->id,403);abort_unless($a->status==='requested',422);$status=$data['decision']==='approved'?'assigned':'rejected';DB::table('training_assignments')->where('id',$a->id)->update(['status'=>$status,'decided_by'=>$r->user()->id,'decision_note'=>$data['note']??null,'updated_at'=>now()]);$this->event($organization,$a->id,$r,$data['decision'],$data['note']??null);app(DailyAlerts::class)->send($organization->id,$e->user_id,'Your training enrolment request was '.$data['decision'].'.');});return back()->with('status','Enrolment decision recorded.');
+ }
+ public function progress(Request $r,Organization $organization,int $assignment) {
+  $data=$r->validate(['status'=>['required',Rule::in(['in_progress','completed'])]]);DB::transaction(function()use($r,$organization,$assignment,$data){Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();$a=$this->assignment($organization,$assignment);$e=Employee::where('organization_id',$organization->id)->findOrFail($a->employee_id);$own=(int)$e->user_id===(int)$r->user()->id && $organization->users()->where('users.id',$r->user()->id)->exists();if($own)abort_unless($r->user()->hasPermission('training.self.progress'),403);else $this->allowed($r,$organization,$a,'training.assignments.update');abort_unless(in_array($a->status,['assigned','in_progress'],true),422);DB::table('training_assignments')->where('id',$a->id)->update(['status'=>$data['status'],'completed_date'=>$data['status']==='completed'?now()->toDateString():null,'updated_at'=>now()]);$this->event($organization,$a->id,$r,$data['status']);});return back()->with('status','Training progress updated.');
+ }
+ public function upload(Request $r,Organization $organization,int $assignment) {
+  $a=$this->assignment($organization,$assignment);$e=Employee::where('organization_id',$organization->id)->findOrFail($a->employee_id);$own=(int)$e->user_id===(int)$r->user()->id && $organization->users()->where('users.id',$r->user()->id)->exists();if($own)abort_unless($r->user()->hasPermission('training.self.certificate.upload'),403);else $this->allowed($r,$organization,$a,'training.certificates.upload');abort_unless($a->status==='completed',422);
+  $data=$r->validate(['certificate'=>'required|file|mimes:pdf,jpg,jpeg,png|max:10240']);$file=$data['certificate'];$path=$file->store('training-certificates/'.$organization->id,'local');abort_unless($path,500);$name=\Illuminate\Support\Str::limit(preg_replace('/[\x00-\x1f\x7f\/\\\\]+/u','_',$file->getClientOriginalName())?:'certificate',200,'');
+  try{DB::transaction(function()use($organization,$a,$r,$path,$name){DB::table('training_certificates')->insert(['organization_id'=>$organization->id,'assignment_id'=>$a->id,'storage_path'=>$path,'original_name'=>$name,'uploaded_by'=>$r->user()->id,'created_at'=>now(),'updated_at'=>now()]);$this->event($organization,$a->id,$r,'certificate_uploaded');});}catch(Throwable $exception){Storage::disk('local')->delete($path);throw $exception;}return back()->with('status','Certificate uploaded.');
+ }
+ public function download(Request $r,Organization $organization,int $assignment,int $certificate) {
+  $a=$this->assignment($organization,$assignment);$e=Employee::where('organization_id',$organization->id)->findOrFail($a->employee_id);$own=(int)$e->user_id===(int)$r->user()->id && $organization->users()->where('users.id',$r->user()->id)->exists();if($own)abort_unless($r->user()->hasPermission('training.self.certificate.download'),403);else $this->allowed($r,$organization,$a,'training.certificates.view');$c=DB::table('training_certificates')->where('organization_id',$organization->id)->where('assignment_id',$a->id)->where('id',$certificate)->first();abort_unless($c && Storage::disk('local')->exists($c->storage_path),404);return Storage::disk('local')->download($c->storage_path,$c->original_name,['Content-Type'=>'application/octet-stream','X-Content-Type-Options'=>'nosniff','Cache-Control'=>'private, no-store']);
+ }
+}
