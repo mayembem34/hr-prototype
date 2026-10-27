@@ -3,6 +3,7 @@
 @php($can = fn($permission) => auth()->user()->hasPermission($permission, $organization))
 <p><a href="{{ route('home') }}">Organizations</a> / {{ $organization->name }}</p><h1>{{ $organization->name }}</h1>
 @if($can('branding.view') && $organization->logo_path)<img class="logo" src="{{ asset('storage/'.$organization->logo_path) }}" alt="{{ $organization->name }} logo">@endif
+@if($can('chat.general.view') || $can('chat.direct.view'))<section><h2>Staff chat</h2><a href="{{ route('chat.index',$organization) }}">Open staff chat</a></section>@endif
 @if($can('employees.view'))<section><h2>Employees</h2><a href="{{ route('employees.index', $organization) }}">Open employee records</a></section>@endif
 @if($can('units.view'))
 <section><h2>Organization chart</h2><p>Units are shown in their reporting hierarchy. Assigning a unit head does not grant permissions.</p>
