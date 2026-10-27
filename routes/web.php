@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LifecycleController;
+use App\Http\Controllers\RecruitmentActionsController;
+use App\Http\Controllers\SelfLifecycleController;
 use App\Http\Controllers\HolidayController;
 
 Route::get('/invite/{token}', [InvitationController::class, 'form'])->middleware('throttle:10,1')->name('invitations.form');
@@ -45,6 +47,13 @@ Route::middleware('auth')->group(function () {
     Route::post('/organizations/{organization}/vacancies/{vacancy}', [LifecycleController::class, 'updateVacancy'])->name('recruitment.vacancy.update');
     Route::post('/organizations/{organization}/applications', [LifecycleController::class, 'createApplication'])->name('recruitment.application.create');
     Route::post('/organizations/{organization}/applications/{application}', [LifecycleController::class, 'updateApplication'])->name('recruitment.application.update');
+    Route::post('/organizations/{organization}/applications/{application}/interviews', [RecruitmentActionsController::class,'interview'])->name('recruitment.interview');
+    Route::post('/organizations/{organization}/applications/{application}/offers', [RecruitmentActionsController::class,'offer'])->name('recruitment.offer');
+    Route::post('/organizations/{organization}/applications/{application}/hire', [RecruitmentActionsController::class,'hire'])->name('recruitment.hire');
+    Route::get('/organizations/{organization}/my-lifecycle/notifications', [SelfLifecycleController::class,'notifications'])->name('lifecycle.notifications');
+    Route::post('/organizations/{organization}/my-lifecycle/notifications/{notification}/read', [SelfLifecycleController::class,'readNotification'])->name('lifecycle.notification.read');
+    Route::get('/organizations/{organization}/my-lifecycle', [SelfLifecycleController::class,'index'])->name('lifecycle.self');
+    Route::post('/organizations/{organization}/my-lifecycle/{case}/tasks/{task}', [SelfLifecycleController::class,'complete'])->name('lifecycle.self.complete');
     Route::get('/organizations/{organization}/lifecycle', [LifecycleController::class, 'cases'])->name('lifecycle.cases');
     Route::post('/organizations/{organization}/lifecycle', [LifecycleController::class, 'createCase'])->name('lifecycle.case.create');
     Route::post('/organizations/{organization}/lifecycle/{case}/tasks', [LifecycleController::class, 'addTask'])->name('lifecycle.task.create');

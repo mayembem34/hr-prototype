@@ -8,7 +8,7 @@ class User extends Authenticatable {
     protected $fillable = ['name', 'email', 'password'];
     protected $hidden = ['password', 'remember_token'];
     protected function casts(): array { return ['email_verified_at' => 'datetime', 'password' => 'hashed', 'is_platform_admin' => 'boolean']; }
-    public function organizations() { return $this->belongsToMany(Organization::class)->withPivot('is_admin')->withTimestamps(); }
+    public function organizations() { return $this->belongsToMany(Organization::class)->withPivot('is_admin','is_active')->wherePivot('is_active',true)->withTimestamps(); }
     public function hasPermission(string $key, ?Organization $organization = null): bool {
         $permission = \App\Models\Permission::where('key', $key)->first();
         if (! $permission) return false;

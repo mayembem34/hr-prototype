@@ -77,7 +77,9 @@ class FoundationController extends Controller {
                 $user=User::create(['name'=>$data['name'],'email'=>$data['email'],'password'=>\Illuminate\Support\Str::random(64)]);
                 $user->must_set_password=true; $user->save(); $newUser=$user;
             }
-            $organization->users()->syncWithoutDetaching([$user->id=>['is_admin'=>true]]);
+            $existing=DB::table('organization_user')->where('organization_id',$organization->id)->where('user_id',$user->id)->first();
+            if($existing) DB::table('organization_user')->where('id',$existing->id)->update(['is_active'=>true,'is_admin'=>true,'updated_at'=>now()]);
+            else $organization->users()->attach($user->id,['is_admin'=>true]);
         });
         if ($newUser && ! app(\App\Services\AccountInvitations::class)->send($organization,$newUser,$request->user())) return back()->with('status','Administrator created, but the invitation failed. Check mail configuration and resend it.');
         return back()->with('status',$newUser?'Administrator assigned and invitation sent.':'Organization administrator assigned.');

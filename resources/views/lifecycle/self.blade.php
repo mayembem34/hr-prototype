@@ -1,0 +1,4 @@
+@extends('layout')
+@section('content')
+<p><a href="{{ route('home') }}">Organizations</a> / {{ $organization->name }}</p><h1>My lifecycle checklists</h1><p><a href="{{ route('lifecycle.notifications',$organization) }}">Lifecycle notifications</a></p><section>@forelse($cases as $case)<h2>{{ ucfirst($case->kind) }} · {{ ucfirst($case->status) }}</h2>@forelse($case->tasks as $task)<p>{{ $task->completed ? 'Complete' : 'Pending' }} · {{ $task->title }}</p>@if(!$task->completed && $case->status==='open' && auth()->user()->hasPermission('lifecycle.self.update'))<form method="post" action="{{ route('lifecycle.self.complete',[$organization,$case,$task]) }}">@csrf<button>Mark complete</button></form>@endif @empty<p>No tasks assigned to you.</p>@endforelse @empty<p>No lifecycle checklists available.</p>@endforelse</section>
+@endsection

@@ -39,6 +39,7 @@ class SelfProfileController extends Controller {
                 $isNew=!$employee->exists; $employee->save();
                 DB::table('employee_changes')->insert(['organization_id'=>$organization->id,'employee_id'=>$employee->id,'actor_id'=>$request->user()->id,'action'=>$isNew?'self_created':'self_updated','before'=>$before===null?null:json_encode($before,JSON_THROW_ON_ERROR),'after'=>json_encode($employee->only(self::PERSONAL_FIELDS),JSON_THROW_ON_ERROR),'created_at'=>now(),'updated_at'=>now()]);
             }
+            if (\App\Models\JobApplication::where('organization_id',$organization->id)->where('hired_user_id',$request->user()->id)->where('stage','hired')->exists()) app(\App\Services\LifecycleDefaults::class)->ensureOnboarding($organization,$employee,$request->user()->id);
         });
         return redirect()->route('self-profile.show',$organization)->with('status','Your employee profile has been saved.');
     }

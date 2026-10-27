@@ -26,11 +26,11 @@ class LifecycleTest extends TestCase {
     public function test_cases_checklists_and_probation_outcome(): void {
         $org=Organization::create(['name'=>'A']);$admin=$this->admin($org);$e=$this->employee($org,'E1');$base='/organizations/'.$org->id.'/lifecycle';
         foreach(['onboarding','probation','offboarding'] as $kind)$this->actingAs($admin)->post($base,['employee_id'=>$e->id,'kind'=>$kind])->assertRedirect();
-        $case=LifecycleCase::where('kind','probation')->firstOrFail();$this->post($base.'/'.$case->id.'/tasks',['title'=>'Review objectives'])->assertRedirect();$task=LifecycleTask::firstOrFail();
+        $case=LifecycleCase::where('kind','probation')->firstOrFail();$this->post($base.'/'.$case->id.'/tasks',['title'=>'Review objectives','assignee'=>'staff'])->assertRedirect();$task=$case->tasks()->where('title','Review objectives')->firstOrFail();
         $this->post($base.'/'.$case->id.'/complete',['outcome'=>'confirmed'])->assertSessionHasErrors('case');
-        $this->post($base.'/'.$case->id.'/tasks/'.$task->id,['completed'=>1])->assertRedirect();$this->post($base.'/'.$case->id.'/complete',['outcome'=>'confirmed'])->assertRedirect();
+        foreach($case->tasks as $item)$this->post($base.'/'.$case->id.'/tasks/'.$item->id,['completed'=>1])->assertRedirect();$this->post($base.'/'.$case->id.'/complete',['outcome'=>'confirmed'])->assertRedirect();
         $this->assertDatabaseHas('lifecycle_cases',['id'=>$case->id,'status'=>'completed','outcome'=>'confirmed']);$this->get($base)->assertOk()->assertSee('Review objectives');
-        $offboard=LifecycleCase::where('kind','offboarding')->firstOrFail();$this->post($base.'/'.$offboard->id.'/complete',[])->assertRedirect();$this->assertSame('active',$e->fresh()->status);
+        $offboard=LifecycleCase::where('kind','offboarding')->firstOrFail();foreach($offboard->tasks as $item)$this->post($base.'/'.$offboard->id.'/tasks/'.$item->id,['completed'=>1])->assertRedirect();$this->post($base.'/'.$offboard->id.'/complete',[])->assertRedirect();$this->assertSame('left',$e->fresh()->status);
     }
     public function test_tenant_and_scoped_permissions_are_enforced(): void {
         $a=Organization::create(['name'=>'A']);$b=Organization::create(['name'=>'B']);$admin=$this->admin($a);$inside=$a->units()->create(['name'=>'Inside']);$outside=$a->units()->create(['name'=>'Outside']);$e1=$this->employee($a,'IN',$inside);$e2=$this->employee($a,'OUT',$outside);$foreign=$this->employee($b,'FOREIGN');
