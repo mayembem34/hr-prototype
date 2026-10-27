@@ -11,6 +11,7 @@ use App\Http\Controllers\LifecycleController;
 use App\Http\Controllers\RecruitmentActionsController;
 use App\Http\Controllers\SelfLifecycleController;
 use App\Http\Controllers\HolidayController;
+use App\Http\Controllers\DevelopmentController;
 
 Route::get('/invite/{token}', [InvitationController::class, 'form'])->middleware('throttle:10,1')->name('invitations.form');
 Route::post('/invite/{token}', [InvitationController::class, 'accept'])->middleware('throttle:10,1')->name('invitations.accept');
@@ -56,6 +57,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/organizations/{organization}/my-lifecycle/notifications/{notification}/read', [SelfLifecycleController::class,'readNotification'])->name('lifecycle.notification.read');
     Route::get('/organizations/{organization}/my-lifecycle', [SelfLifecycleController::class,'index'])->name('lifecycle.self');
     Route::post('/organizations/{organization}/my-lifecycle/{case}/tasks/{task}', [SelfLifecycleController::class,'complete'])->name('lifecycle.self.complete');
+    Route::get('/organizations/{organization}/development/{area}', [DevelopmentController::class, 'index'])->name('development.index');
+    Route::post('/organizations/{organization}/development/{area}', [DevelopmentController::class, 'store'])->name('development.store');
+    Route::post('/organizations/{organization}/development/{area}/{record}', [DevelopmentController::class, 'update'])->name('development.update');
     Route::get('/organizations/{organization}/lifecycle', [LifecycleController::class, 'cases'])->name('lifecycle.cases');
     Route::post('/organizations/{organization}/lifecycle', [LifecycleController::class, 'createCase'])->name('lifecycle.case.create');
     Route::post('/organizations/{organization}/lifecycle/{case}/tasks', [LifecycleController::class, 'addTask'])->name('lifecycle.task.create');
