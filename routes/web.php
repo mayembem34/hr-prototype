@@ -15,6 +15,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/organizations/{organization}', [FoundationController::class, 'show'])->name('organizations.show');
     Route::post('/organizations/{organization}/admins', [FoundationController::class, 'addAdmin'])->name('organizations.admins');
     Route::post('/organizations/{organization}/units', [FoundationController::class, 'createUnit'])->name('units.create');
+    Route::post('/organizations/{organization}/units/{unit}/head', [FoundationController::class, 'assignUnitHead'])->name('units.heads.assign');
     Route::post('/organizations/{organization}/units/{unit}', [FoundationController::class, 'updateUnit'])->name('units.update');
     Route::post('/organizations/{organization}/roles', [RoleController::class, 'create'])->name('roles.create');
     Route::post('/organizations/{organization}/roles/{role}', [RoleController::class, 'update'])->name('roles.update');

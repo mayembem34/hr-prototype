@@ -2,6 +2,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Organization;
+use App\Models\Employee;
+use App\Services\EmployeeAccess;
 use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -46,7 +48,20 @@ class FoundationController extends Controller {
         $permissions = $user->hasPermission('roles.view', $organization) ? \App\Models\Permission::where('scope', 'organization')->orderBy('key')->get() : collect();
         $members = $user->hasPermission('members.view', $organization) ? $organization->users()->orderBy('name')->get() : collect();
         $assignments = $user->hasPermission('assignments.view', $organization) ? DB::table('organization_role_user')->where('organization_id', $organization->id)->get()->groupBy('user_id') : collect();
-        return view('organization', compact('organization', 'units', 'admins', 'roles', 'permissions', 'members', 'assignments'));
+        $headCandidates = $user->hasPermission('units.heads.view', $organization) && $user->hasPermission('employees.view', $organization)
+            ? app(EmployeeAccess::class)->filter(Employee::query(), $user, $organization, 'employees.view')->orderBy('last_name')->orderBy('first_name')->get() : collect();
+        $unitChanges = $user->hasPermission('units.view', $organization) && $user->hasPermission('units.history.view', $organization)
+            ? DB::table('unit_changes')->leftJoin('users','users.id','=','unit_changes.actor_id')->where('unit_changes.organization_id',$organization->id)
+                ->when(! $user->hasPermission('units.heads.view', $organization), fn ($q) => $q->where('unit_changes.action','!=','head_changed'))
+                ->orderByDesc('unit_changes.id')->select('unit_changes.*','users.name as actor_name')->limit(100)->get() : collect();
+        $chart = []; $stack=[]; $visited=[];
+        foreach ($units->whereNull('parent_id')->reverse() as $root) $stack[] = [$root,0];
+        while ($stack) {
+            [$current,$level] = array_pop($stack); if (isset($visited[$current->id])) continue;
+            $visited[$current->id] = true; $chart[] = ['unit'=>$current,'level'=>$level];
+            foreach ($units->where('parent_id',$current->id)->reverse() as $child) $stack[] = [$child,$level+1];
+        }
+        return view('organization', compact('organization', 'units', 'admins', 'roles', 'permissions', 'members', 'assignments', 'headCandidates', 'unitChanges', 'chart'));
     }
     public function addAdmin(Request $request, Organization $organization) {
         $this->authorizePermission($request, 'admins.assign', $organization);
@@ -64,12 +79,18 @@ class FoundationController extends Controller {
     public function createUnit(Request $request, Organization $organization) {
         $this->authorizePermission($request, 'units.create', $organization);
         $data = $request->validate(['name' => 'required|string|max:255', 'parent_id' => ['nullable', Rule::exists('units', 'id')->where('organization_id', $organization->id)]]);
-        $organization->units()->create($data); return back()->with('status', 'Unit created.');
+        DB::transaction(function () use ($organization, $request, $data) {
+            Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();
+            $unit = $organization->units()->create($data);
+            $parent = isset($data['parent_id']) ? $organization->units()->whereKey($data['parent_id'])->value('name') : null;
+            $this->recordUnitChange($request, $organization, $unit, 'created', null, $parent);
+        });
+        return back()->with('status', 'Unit created.');
     }
     public function updateUnit(Request $request, Organization $organization, Unit $unit) {
         $this->authorizePermission($request, 'units.update', $organization); abort_unless($unit->organization_id === $organization->id, 404);
         $data = $request->validate(['name' => 'required|string|max:255', 'parent_id' => ['nullable', Rule::exists('units', 'id')->where('organization_id', $organization->id)]]);
-        DB::transaction(function () use ($organization, $unit, $data) {
+        DB::transaction(function () use ($organization, $unit, $data, $request) {
             // Serialize hierarchy changes for this tenant to prevent concurrent cycles.
             Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();
             $cursor = $data['parent_id'] ?? null; $visited = [];
@@ -78,9 +99,35 @@ class FoundationController extends Controller {
                 $visited[$cursor] = true;
                 $cursor = $organization->units()->whereKey($cursor)->value('parent_id');
             }
+            $unit->refresh();
+            $oldParent=$unit->parent_id === null ? null : $organization->units()->whereKey($unit->parent_id)->value('name');
+            $newParent=empty($data['parent_id']) ? null : $organization->units()->whereKey($data['parent_id'])->value('name');
+            $oldName=$unit->name; $oldParentId=$unit->parent_id;
             $unit->update($data);
+            if ($oldName !== $unit->name) $this->recordUnitChange($request,$organization,$unit,'renamed',$oldName,$unit->name);
+            if ((string)$oldParentId !== (string)$unit->parent_id) $this->recordUnitChange($request,$organization,$unit,'moved',$oldParent,$newParent);
         });
         return back()->with('status', 'Unit updated.');
+    }
+    private function recordUnitChange(Request $request, Organization $organization, Unit $unit, string $action, ?string $before, ?string $after): void {
+        DB::table('unit_changes')->insert(['organization_id'=>$organization->id,'unit_id'=>$unit->id,'actor_id'=>$request->user()->id,'action'=>$action,'unit_name'=>$unit->name,'before_value'=>$before,'after_value'=>$after,'created_at'=>now(),'updated_at'=>now()]);
+    }
+    public function assignUnitHead(Request $request, Organization $organization, Unit $unit) {
+        $this->authorizePermission($request,'units.heads.assign',$organization);
+        abort_unless((int)$unit->organization_id === (int)$organization->id,404);
+        $data=$request->validate(['head_employee_id'=>['nullable','integer',Rule::exists('employees','id')->where('organization_id',$organization->id)]]);
+        DB::transaction(function () use ($request,$organization,$unit,$data) {
+            Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail(); $unit->refresh();
+            $headId=$data['head_employee_id'] ?? null;
+            if ((string)$unit->head_employee_id === (string)$headId) return;
+            if ($headId !== null) {
+                $head=Employee::where('organization_id',$organization->id)->whereKey($headId)->firstOrFail();
+                abort_unless(app(EmployeeAccess::class)->allows($request->user(),$organization,'employees.view',$head),403);
+            }
+            $old=$unit->head_employee_id; $unit->head_employee_id=$headId; $unit->save();
+            $this->recordUnitChange($request,$organization,$unit,'head_changed',$old === null ? null : (string)$old,$headId === null ? null : (string)$headId);
+        });
+        return back()->with('status','Unit head updated.');
     }
     public function branding(Request $request, Organization $organization) {
         $this->authorizePermission($request, 'branding.update', $organization);
