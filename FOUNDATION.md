@@ -1,6 +1,6 @@
 # Foundation
 
-The prototype supports organizations, administrators, nested units, branding settings, custom organization roles and operation permissions. See [ROLES.md](ROLES.md) for permissions and their current scope. Employees, documents, audit trails, and unit-level and own-record access scopes are not yet implemented. Branding colors are saved but not applied to the interface. This is an early prototype, not production-ready.
+The prototype supports organizations, administrators, nested units, branding settings, custom organization roles and operation permissions. See [ROLES.md](ROLES.md) for permissions and their current scope. Employee profiles, private documents and scoped access are available; a general audit trail remains outstanding. Branding colors are saved but not applied to the interface. This is an early prototype, not production-ready.
 
 After configuring MySQL and installing dependencies as described in README, run:
 
