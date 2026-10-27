@@ -3,6 +3,7 @@
 @php($can = fn($permission) => auth()->user()->hasPermission($permission, $organization))
 <p><a href="{{ route('home') }}">Organizations</a> / {{ $organization->name }}</p><h1>{{ $organization->name }}</h1>
 @if($can('branding.view') && $organization->logo_path)<img class="logo" src="{{ asset('storage/'.$organization->logo_path) }}" alt="{{ $organization->name }} logo">@endif
+@if($can('employees.view'))<section><h2>Employees</h2><p>Manage employee profiles, unit assignments and reporting relationships.</p><a href="{{ route('employees.index', $organization) }}">Open employee records</a></section>@endif
 @if($can('units.view'))
 <section><h2>Units</h2><p>Units can be nested within other units.</p>
 @forelse($units as $unit)
