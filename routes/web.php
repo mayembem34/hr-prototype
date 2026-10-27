@@ -2,6 +2,7 @@
 use App\Http\Controllers\FoundationController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\EmployeeDocumentController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/login', [FoundationController::class, 'loginForm'])->name('login');
@@ -23,5 +24,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/organizations/{organization}/employees', [EmployeeController::class, 'store'])->name('employees.store');
     Route::get('/organizations/{organization}/employees/{employee}', [EmployeeController::class, 'show'])->name('employees.show');
     Route::post('/organizations/{organization}/employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update');
+    Route::get('/organizations/{organization}/employees/{employee}/documents', [EmployeeDocumentController::class, 'index'])->name('documents.index');
+    Route::post('/organizations/{organization}/employees/{employee}/documents', [EmployeeDocumentController::class, 'store'])->name('documents.store');
+    Route::get('/organizations/{organization}/employees/{employee}/documents/{document}/preview', [EmployeeDocumentController::class, 'preview'])->name('documents.preview');
+    Route::get('/organizations/{organization}/employees/{employee}/documents/{document}/download', [EmployeeDocumentController::class, 'download'])->name('documents.download');
+    Route::post('/organizations/{organization}/employees/{employee}/documents/{document}/archive', [EmployeeDocumentController::class, 'archive'])->name('documents.archive');
+    Route::post('/organizations/{organization}/employees/{employee}/documents/{document}/restore', [EmployeeDocumentController::class, 'restore'])->name('documents.restore');
     Route::post('/organizations/{organization}/branding', [FoundationController::class, 'branding'])->name('branding.update');
 });
