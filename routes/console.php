@@ -11,3 +11,6 @@ Artisan::command('hr:platform-admin {email} {name}', function () {
     $user->is_platform_admin = true; $user->save();
     $this->info('Platform administrator created.'); return 0;
 })->purpose('Create a platform administrator');
+
+Artisan::command('training:remind', function () { $this->info('Training reminders sent: '.app(\App\Services\TrainingReminders::class)->sendDue()); })->purpose('Send due training reminders');
+\Illuminate\Support\Facades\Schedule::command('training:remind')->daily()->withoutOverlapping();
