@@ -3,13 +3,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Employee;
 use App\Models\Organization;
+use App\Services\EmployeeAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class EmployeeController extends Controller {
-    private const FIELDS = ['employee_number','first_name','last_name','email','phone','job_title','employment_type','start_date','status','unit_id','manager_id'];
+    private const FIELDS = ['employee_number','first_name','last_name','email','phone','job_title','employment_type','start_date','status','unit_id','manager_id','user_id'];
     private function authorizeEmployee(Request $request, Organization $organization, string $permission): void {
         abort_unless($request->user()->hasPermission($permission, $organization), 403);
     }
@@ -31,18 +32,20 @@ class EmployeeController extends Controller {
     private function record(Organization $organization, Employee $employee, Request $request, string $action, ?array $before): void {
         DB::table('employee_changes')->insert(['organization_id'=>$organization->id, 'employee_id'=>$employee->id, 'actor_id'=>$request->user()->id, 'action'=>$action, 'before'=>$before === null ? null : json_encode($before, JSON_THROW_ON_ERROR), 'after'=>json_encode($this->snapshot($employee), JSON_THROW_ON_ERROR), 'created_at'=>now(), 'updated_at'=>now()]);
     }
-    private function referenceData(Organization $organization): array {
-        return ['units' => $organization->units()->orderBy('name')->get(), 'managers' => Employee::where('organization_id', $organization->id)->orderBy('last_name')->orderBy('first_name')->get()];
+    private function referenceData(Organization $organization, Request $request): array {
+        return ['units' => $organization->units()->orderBy('name')->get(), 'managers' => app(EmployeeAccess::class)->filter(Employee::query(), $request->user(), $organization, 'employees.view')->orderBy('last_name')->orderBy('first_name')->get()];
     }
     public function index(Request $request, Organization $organization) {
         $this->authorizeEmployee($request, $organization, 'employees.view');
-        $employees = Employee::where('organization_id', $organization->id)->with(['unit','manager'])->orderBy('last_name')->orderBy('first_name')->paginate(30);
-        $reference = $request->user()->hasPermission('employees.create', $organization) ? $this->referenceData($organization) : ['units'=>collect(), 'managers'=>collect()];
+        $employees = app(EmployeeAccess::class)->filter(Employee::query(), $request->user(), $organization, 'employees.view')->with(['unit','manager'])->orderBy('last_name')->orderBy('first_name')->paginate(30);
+        $reference = $request->user()->hasPermission('employees.create', $organization) ? $this->referenceData($organization, $request) : ['units'=>collect(), 'managers'=>collect()];
         return view('employees.index', ['organization'=>$organization, 'employees'=>$employees] + $reference);
     }
     public function store(Request $request, Organization $organization) {
         $this->authorizeEmployee($request, $organization, 'employees.create');
         $data = $this->validateEmployee($request, $organization);
+        $candidate = new Employee($data); $candidate->organization_id = $organization->id;
+        abort_unless(app(EmployeeAccess::class)->allows($request->user(), $organization, 'employees.create', $candidate), 403);
         $employee = DB::transaction(function () use ($organization, $request, $data) {
             Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();
             $employee = new Employee($data); $employee->organization_id = $organization->id; $employee->save();
@@ -52,17 +55,29 @@ class EmployeeController extends Controller {
     }
     public function show(Request $request, Organization $organization, Employee $employee) {
         $this->authorizeEmployee($request, $organization, 'employees.view'); $this->own($organization, $employee);
+        abort_unless(app(EmployeeAccess::class)->allows($request->user(), $organization, 'employees.view', $employee), 403);
         $employee->load(['unit','manager']);
-        $reference = $request->user()->hasPermission('employees.update', $organization) ? $this->referenceData($organization) : ['units'=>collect(), 'managers'=>collect()];
-        $changes = $request->user()->hasPermission('employees.history.view', $organization) ? DB::table('employee_changes')->leftJoin('users', 'users.id', '=', 'employee_changes.actor_id')->where('employee_changes.organization_id', $organization->id)->where('employee_changes.employee_id', $employee->id)->orderByDesc('employee_changes.id')->select('employee_changes.*','users.name as actor_name')->get() : collect();
-        return view('employees.show', ['organization'=>$organization,'employee'=>$employee,'changes'=>$changes] + $reference);
+        if ($employee->manager && ! app(EmployeeAccess::class)->allows($request->user(), $organization, 'employees.view', $employee->manager)) $employee->setRelation('manager', null);
+        $reference = app(EmployeeAccess::class)->allows($request->user(), $organization, 'employees.update', $employee) ? $this->referenceData($organization, $request) : ['units'=>collect(), 'managers'=>collect()];
+        $changes = app(EmployeeAccess::class)->allows($request->user(), $organization, 'employees.history.view', $employee) ? DB::table('employee_changes')->leftJoin('users', 'users.id', '=', 'employee_changes.actor_id')->where('employee_changes.organization_id', $organization->id)->where('employee_changes.employee_id', $employee->id)->orderByDesc('employee_changes.id')->select('employee_changes.*','users.name as actor_name')->get() : collect();
+        $members = $request->user()->hasPermission('employees.accounts.assign', $organization) && $request->user()->hasPermission('members.view', $organization) ? $organization->users()->orderBy('name')->get() : collect();
+        $linkedUser = $employee->user_id && $request->user()->hasPermission('members.view', $organization) ? $organization->users()->where('users.id', $employee->user_id)->first() : null;
+        return view('employees.show', ['organization'=>$organization,'employee'=>$employee,'changes'=>$changes,'members'=>$members,'linkedUser'=>$linkedUser] + $reference);
     }
     public function update(Request $request, Organization $organization, Employee $employee) {
         $this->authorizeEmployee($request, $organization, 'employees.update'); $this->own($organization, $employee);
+        $access = app(EmployeeAccess::class);
+        abort_unless($access->allows($request->user(), $organization, 'employees.update', $employee), 403);
         $data = $this->validateEmployee($request, $organization, $employee);
+        $candidate = clone $employee; $candidate->fill($data);
+        abort_unless($access->allows($request->user(), $organization, 'employees.update', $candidate), 403);
         DB::transaction(function () use ($organization, $employee, $request, $data) {
             Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();
             $employee->refresh();
+            $access = app(EmployeeAccess::class);
+            abort_unless($access->allows($request->user(), $organization, 'employees.update', $employee), 403);
+            $candidate = clone $employee; $candidate->fill($data);
+            abort_unless($access->allows($request->user(), $organization, 'employees.update', $candidate), 403);
             $cursor = $data['manager_id'] ?? null; $visited = [];
             while ($cursor !== null) {
                 if ((int) $cursor === (int) $employee->id || isset($visited[$cursor])) throw ValidationException::withMessages(['manager_id'=>'A reporting line cannot contain a cycle.']);
@@ -73,5 +88,18 @@ class EmployeeController extends Controller {
             if ($employee->isDirty()) { $employee->save(); $this->record($organization, $employee, $request, 'updated', $before); }
         });
         return back()->with('status', 'Employee updated.');
+    }
+    public function linkAccount(Request $request, Organization $organization, Employee $employee) {
+        $this->authorizeEmployee($request, $organization, 'employees.accounts.assign'); $this->own($organization, $employee);
+        abort_unless(app(EmployeeAccess::class)->allows($request->user(), $organization, 'employees.view', $employee), 403);
+        $data = $request->validate(['user_id'=>['nullable','integer', Rule::exists('organization_user','user_id')->where('organization_id',$organization->id)]]);
+        DB::transaction(function () use ($organization,$employee,$request,$data) {
+            Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();
+            $employee->refresh(); $id=$data['user_id'] ?? null;
+            if ($id && Employee::where('organization_id',$organization->id)->where('user_id',$id)->where('id','!=',$employee->id)->exists()) throw ValidationException::withMessages(['user_id'=>'This account is already linked to another employee in this organization.']);
+            $before=$this->snapshot($employee); $employee->user_id=$id;
+            if ($employee->isDirty()) { $employee->save(); $this->record($organization,$employee,$request,'account_linked',$before); }
+        });
+        return back()->with('status','Employee account link updated.');
     }
 }

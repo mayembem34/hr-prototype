@@ -17,7 +17,7 @@ class RoleController extends Controller {
     private function ownedRole(Organization $org, Role $role): void { abort_unless((int)$role->organization_id === (int)$org->id, 404); }
     private function canGrant(Request $request, Organization $org, $permissions): void {
         foreach ($permissions as $permission) {
-            if ($permission->scope !== 'organization' || ! $request->user()->hasPermission($permission->key, $org)) abort(403, 'You cannot manage permissions beyond your own access.');
+            if ($permission->scope !== 'organization' || ! $request->user()->hasOrganizationPermission($permission->key, $org)) abort(403, 'You cannot manage permissions beyond your own access.');
         }
     }
     private function validateRole(Request $request, Organization $organization, ?Role $role = null): array {
@@ -27,12 +27,29 @@ class RoleController extends Controller {
             'permissions.*' => ['integer', 'distinct', Rule::exists('permissions', 'id')->where('scope', 'organization')],
         ]);
     }
+    private function scopeAssignments(Request $request, Organization $organization, $permissions): array {
+        $data = $request->validate(['scopes'=>'array', 'scope_units'=>'array']);
+        $out=[];
+        foreach ($permissions as $permission) {
+            $scope=$data['scopes'][$permission->id] ?? 'organization';
+            if (! in_array($scope, ['organization','own','unit','unit_tree'], true) || ($scope !== 'organization' && ! \App\Services\EmployeeAccess::scopedPermission($permission->key))) throw ValidationException::withMessages(['scopes'=>'Invalid permission scope.']);
+            $unit=null;
+            if (in_array($scope, ['unit','unit_tree'], true)) {
+                $unit=$data['scope_units'][$permission->id] ?? null;
+                if (! is_scalar($unit) || ! ctype_digit((string)$unit) || ! $organization->units()->whereKey($unit)->exists()) throw ValidationException::withMessages(['scope_units'=>'Select a unit in this organization for each unit scope.']);
+                $unit=(int)$unit;
+            }
+            $out[$permission->id]=['access_scope'=>$scope,'unit_id'=>$unit];
+        }
+        return $out;
+    }
     public function create(Request $request, Organization $organization) {
         $this->authorizeOp($request, $organization, 'roles.create');
         $data = $this->validateRole($request, $organization); $permissions = Permission::whereIn('id', $data['permissions'] ?? [])->get();
         $this->canGrant($request, $organization, $permissions);
-        DB::transaction(function () use ($organization, $data, $permissions) {
-            $role = new Role(['name' => $data['name']]); $role->organization_id = $organization->id; $role->save(); $role->permissions()->sync($permissions->modelKeys());
+        $scopes = $this->scopeAssignments($request, $organization, $permissions);
+        DB::transaction(function () use ($organization, $data, $scopes) {
+            $role = new Role(['name' => $data['name']]); $role->organization_id = $organization->id; $role->save(); $role->permissions()->sync($scopes);
         });
         return back()->with('status', 'Role created.');
     }
@@ -40,7 +57,8 @@ class RoleController extends Controller {
         $this->authorizeOp($request, $organization, 'roles.update'); $this->ownedRole($organization, $role);
         $data = $this->validateRole($request, $organization, $role); $permissions = Permission::whereIn('id', $data['permissions'] ?? [])->get();
         $this->canGrant($request, $organization, $role->permissions); $this->canGrant($request, $organization, $permissions);
-        DB::transaction(function () use ($role, $data, $permissions) { $role->update(['name' => $data['name']]); $role->permissions()->sync($permissions->modelKeys()); });
+        $scopes = $this->scopeAssignments($request, $organization, $permissions);
+        DB::transaction(function () use ($role, $data, $scopes) { $role->update(['name' => $data['name']]); $role->permissions()->sync($scopes); });
         return back()->with('status', 'Role updated.');
     }
     public function delete(Request $request, Organization $organization, Role $role) {

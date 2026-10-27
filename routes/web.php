@@ -23,6 +23,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/organizations/{organization}/employees', [EmployeeController::class, 'index'])->name('employees.index');
     Route::post('/organizations/{organization}/employees', [EmployeeController::class, 'store'])->name('employees.store');
     Route::get('/organizations/{organization}/employees/{employee}', [EmployeeController::class, 'show'])->name('employees.show');
+    Route::post('/organizations/{organization}/employees/{employee}/account', [EmployeeController::class, 'linkAccount'])->name('employees.account');
     Route::post('/organizations/{organization}/employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update');
     Route::get('/organizations/{organization}/employees/{employee}/documents', [EmployeeDocumentController::class, 'index'])->name('documents.index');
     Route::post('/organizations/{organization}/employees/{employee}/documents', [EmployeeDocumentController::class, 'store'])->name('documents.store');

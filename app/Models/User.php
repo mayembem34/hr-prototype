@@ -28,6 +28,12 @@ class User extends Authenticatable {
             ->where('assignments.user_id', $this->id)->where('assignments.organization_id', $organization->id)
             ->where('roles.organization_id', $organization->id)->where('permissions.key', $key)->exists();
     }
+    public function hasOrganizationPermission(string $key, Organization $organization): bool {
+        if (! $this->hasPermission($key, $organization)) return false;
+        if ($this->is_platform_admin || $this->organizations()->where('organizations.id', $organization->id)->wherePivot('is_admin', true)->exists()) return true;
+        return \Illuminate\Support\Facades\DB::table('organization_role_user as a')->join('roles as r','r.id','=','a.role_id')->join('permission_role as pr','pr.role_id','=','r.id')->join('permissions as p','p.id','=','pr.permission_id')
+            ->where('a.organization_id',$organization->id)->where('r.organization_id',$organization->id)->where('a.user_id',$this->id)->where('p.key',$key)->where('pr.access_scope','organization')->exists();
+    }
     public function administers(Organization $organization): bool {
         return $this->is_platform_admin || $this->organizations()->whereKey($organization->id)->wherePivot('is_admin', true)->exists();
     }

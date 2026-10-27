@@ -14,6 +14,8 @@ class EmployeeDocumentController extends Controller {
     private function authorizeDocument(Request $request, Organization $organization, Employee $employee, string $permission, ?EmployeeDocument $document = null): void {
         abort_unless($request->user()->hasPermission('employees.view', $organization) && $request->user()->hasPermission($permission, $organization), 403);
         abort_unless((int)$employee->organization_id === (int)$organization->id, 404);
+        $access = app(\App\Services\EmployeeAccess::class);
+        abort_unless($access->allows($request->user(), $organization, 'employees.view', $employee) && $access->allows($request->user(), $organization, $permission, $employee), 403);
         if ($document) abort_unless((int)$document->organization_id === (int)$organization->id && (int)$document->employee_id === (int)$employee->id, 404);
     }
     private function logAction(EmployeeDocument $document, Request $request, string $action): void {
@@ -22,7 +24,7 @@ class EmployeeDocumentController extends Controller {
     public function index(Request $request, Organization $organization, Employee $employee) {
         $this->authorizeDocument($request, $organization, $employee, 'documents.view');
         $documents = EmployeeDocument::where('organization_id',$organization->id)->where('employee_id',$employee->id)->orderByDesc('id')->get();
-        $actions = $request->user()->hasPermission('documents.audit.view', $organization)
+        $actions = app(\App\Services\EmployeeAccess::class)->allows($request->user(), $organization, 'documents.audit.view', $employee)
             ? DB::table('employee_document_actions as actions')->join('employee_documents as documents','documents.id','=','actions.document_id')->leftJoin('users','users.id','=','actions.actor_id')
                 ->where('actions.organization_id',$organization->id)->where('documents.organization_id',$organization->id)->where('documents.employee_id',$employee->id)
                 ->select('actions.action','actions.created_at','documents.title','users.name as actor_name')->orderByDesc('actions.id')->limit(100)->get() : collect();

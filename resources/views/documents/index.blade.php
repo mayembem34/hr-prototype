@@ -1,6 +1,6 @@
 @extends('layout')
 @section('content')
-@php($can = fn($permission) => auth()->user()->hasPermission($permission, $organization))
+@php($can = fn($permission) => app(\App\Services\EmployeeAccess::class)->allows(auth()->user(), $organization, $permission, $employee))
 <p><a href="{{ route('employees.show', [$organization,$employee]) }}">{{ $employee->first_name }} {{ $employee->last_name }}</a> / Documents</p><h1>Employee documents</h1>
 <section><h2>Documents</h2><p>Archived documents are retained but cannot be opened until restored.</p>
 @forelse($documents as $document)<article style="border-top:1px solid #dce4ee;padding:12px 0"><strong>{{ $document->title }}</strong> — {{ $document->category }} @if($document->archived_at) <strong>(Archived)</strong> @endif<br><small>{{ $document->original_name }} · {{ number_format($document->size / 1024, 1) }} KB · Uploaded {{ $document->created_at }}</small>
