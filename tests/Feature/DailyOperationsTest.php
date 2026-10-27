@@ -53,4 +53,25 @@ class DailyOperationsTest extends TestCase {
         $this->actingAs($admin)->post('/organizations/'.$a->id.'/leave-requests/'.$leave->id.'/decision',['decision'=>'approved'])->assertForbidden();
         $this->actingAs($other)->post('/organizations/'.$b->id.'/leave-requests/'.$leave->id.'/decision',['decision'=>'approved'])->assertNotFound();
     }
+    public function test_unit_scoped_reviewer_cannot_view_or_approve_other_units(): void {
+        $org=Organization::create(['name'=>'A']); $unitA=$org->units()->create(['name'=>'Unit A']); $unitB=$org->units()->create(['name'=>'Unit B']);
+        $reviewer=$this->member($org); $staffA=$this->member($org); $staffB=$this->member($org); $employeeA=$this->employee($org,$staffA); $employeeB=$this->employee($org,$staffB); $employeeA->unit_id=$unitA->id; $employeeA->save(); $employeeB->unit_id=$unitB->id; $employeeB->save();
+        $role=new Role(['name'=>'Reviewer']); $role->organization_id=$org->id; $role->save();
+        foreach (['leave.requests.view','leave.requests.review'] as $key) $role->permissions()->attach(Permission::where('key',$key)->value('id'),['access_scope'=>'unit','unit_id'=>$unitA->id]);
+        DB::table('organization_role_user')->insert(['organization_id'=>$org->id,'role_id'=>$role->id,'user_id'=>$reviewer->id]);
+        $type=new LeaveType(['name'=>'Annual','annual_days'=>10]);$type->organization_id=$org->id;$type->save();
+        $this->actingAs($staffA)->post('/organizations/'.$org->id.'/my-leave',['leave_type_id'=>$type->id,'start_date'=>'2027-04-01','end_date'=>'2027-04-01'])->assertRedirect();
+        $this->actingAs($staffB)->post('/organizations/'.$org->id.'/my-leave',['leave_type_id'=>$type->id,'start_date'=>'2027-04-02','end_date'=>'2027-04-02'])->assertRedirect();
+        $leaveA=LeaveRequest::where('employee_id',$employeeA->id)->firstOrFail();$leaveB=LeaveRequest::where('employee_id',$employeeB->id)->firstOrFail();
+        $this->actingAs($reviewer)->get('/organizations/'.$org->id.'/leave-requests')->assertOk()->assertSee('2027-04-01')->assertDontSee('2027-04-02');
+        $this->actingAs($reviewer)->post('/organizations/'.$org->id.'/leave-requests/'.$leaveB->id.'/decision',['decision'=>'approved'])->assertForbidden();
+        $this->actingAs($reviewer)->post('/organizations/'.$org->id.'/leave-requests/'.$leaveA->id.'/decision',['decision'=>'approved'])->assertRedirect();
+    }
+    public function test_resend_invalidates_previous_invitation(): void {
+        Mail::fake();$org=Organization::create(['name'=>'A']);$admin=$this->admin($org);
+        $this->actingAs($admin)->post('/organizations/'.$org->id.'/members',['name'=>'New','email'=>'new@example.com'])->assertRedirect();$user=User::where('email','new@example.com')->firstOrFail();
+        $token=str_repeat('c',64);DB::table('account_invitations')->where('user_id',$user->id)->update(['token_hash'=>hash('sha256',$token)]);
+        $this->post('/organizations/'.$org->id.'/members/'.$user->id.'/invitation')->assertRedirect();$this->get('/invite/'.$token)->assertNotFound();
+        $this->assertDatabaseCount('account_invitations',1);
+    }
 }
