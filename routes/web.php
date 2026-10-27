@@ -35,6 +35,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/organizations/{organization}/attendance/clock-in', [DailyController::class,'clockIn'])->name('attendance.clock-in');
     Route::post('/organizations/{organization}/attendance/clock-out', [DailyController::class,'clockOut'])->name('attendance.clock-out');
     Route::get('/organizations/{organization}/attendance', [DailyController::class,'records'])->name('attendance.records');
+    Route::post('/organizations/{organization}/attendance', [DailyController::class,'create'])->name('attendance.create');
     Route::post('/organizations/{organization}/attendance/{entry}', [DailyController::class,'correct'])->name('attendance.correct');
     Route::get('/organizations/{organization}/daily-notifications', [DailyController::class,'notifications'])->name('daily.notifications');
     Route::post('/organizations/{organization}/daily-notifications/{notification}/read', [DailyController::class,'read'])->name('daily.notifications.read');
