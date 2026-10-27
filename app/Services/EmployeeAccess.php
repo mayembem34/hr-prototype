@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
 class EmployeeAccess {
     public static function scopedPermission(string $key): bool {
-        return (str_starts_with($key, 'employees.') && $key !== 'employees.accounts.assign') || str_starts_with($key, 'documents.') || str_starts_with($key, 'development.') || (str_starts_with($key, 'lifecycle.') && !str_starts_with($key, 'lifecycle.self.')) || in_array($key, ['leave.requests.view','leave.requests.supervisor_approve'], true);
+        return (str_starts_with($key, 'employees.') && $key !== 'employees.accounts.assign') || str_starts_with($key, 'documents.') || str_starts_with($key, 'development.') || (str_starts_with($key, 'attendance.') && !str_starts_with($key, 'attendance.self.')) || (str_starts_with($key, 'lifecycle.') && !str_starts_with($key, 'lifecycle.self.')) || in_array($key, ['leave.requests.view','leave.requests.supervisor_approve'], true);
     }
     private function grants(User $user, Organization $org, string $permission): array {
         if (! self::scopedPermission($permission) || ! $user->hasPermission($permission, $org)) return [];

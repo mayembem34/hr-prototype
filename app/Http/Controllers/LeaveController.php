@@ -57,6 +57,7 @@ class LeaveController extends Controller {
             DB::table('leave_approval_steps')->insert(['organization_id'=>$organization->id,'leave_request_id'=>$leave->id,'user_id'=>$supervisor->user_id,'position'=>0,'stage'=>'supervisor','status'=>'pending','created_at'=>now(),'updated_at'=>now()]);
             foreach ($officers as $index=>$officer) DB::table('leave_approval_steps')->insert(['organization_id'=>$organization->id,'leave_request_id'=>$leave->id,'user_id'=>$officer->user_id,'position'=>$index+1,'stage'=>'officer','status'=>'queued','created_at'=>now(),'updated_at'=>now()]);
             $this->recordEvent($organization,$leave,$request,'request','submitted',null);
+            app(\App\Services\DailyAlerts::class)->send($organization->id,$supervisor->user_id,'A leave request is awaiting your review.');
         });
         return back()->with('status','Leave request submitted.');
     }
@@ -165,6 +166,8 @@ class LeaveController extends Controller {
             else $leave->status='approved';
             $leave->decision_note=$data['decision_note']??null; $leave->reviewer_id=$request->user()->id; $leave->decided_at=now(); $leave->save();
             $this->recordEvent($organization,$leave,$request,$step->stage,$data['decision'],$data['decision_note']??null);
+            app(\App\Services\DailyAlerts::class)->send($organization->id,$employee->user_id,'Your leave request was '.$data['decision'].($leave->status==='pending_officer' ? ' at one stage and is awaiting further review.' : '.'));
+            if ($leave->status==='pending_officer' && $next) app(\App\Services\DailyAlerts::class)->send($organization->id,$next->user_id,'A leave request is awaiting your review.');
         }); return back()->with('status','Leave decision recorded.');
     }
 }

@@ -12,6 +12,7 @@ use App\Http\Controllers\RecruitmentActionsController;
 use App\Http\Controllers\SelfLifecycleController;
 use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\DevelopmentController;
+use App\Http\Controllers\DailyController;
 
 Route::get('/invite/{token}', [InvitationController::class, 'form'])->middleware('throttle:10,1')->name('invitations.form');
 Route::post('/invite/{token}', [InvitationController::class, 'accept'])->middleware('throttle:10,1')->name('invitations.accept');
@@ -30,6 +31,14 @@ Route::middleware('auth')->group(function () {
     Route::post('/organizations/{organization}/roles/{role}', [RoleController::class, 'update'])->name('roles.update');
     Route::delete('/organizations/{organization}/roles/{role}', [RoleController::class, 'delete'])->name('roles.delete');
     Route::post('/organizations/{organization}/members/{member}/invitation', [InvitationController::class, 'resend'])->name('invitations.resend');
+    Route::get('/organizations/{organization}/my-attendance', [DailyController::class,'mine'])->name('attendance.mine');
+    Route::post('/organizations/{organization}/attendance/clock-in', [DailyController::class,'clockIn'])->name('attendance.clock-in');
+    Route::post('/organizations/{organization}/attendance/clock-out', [DailyController::class,'clockOut'])->name('attendance.clock-out');
+    Route::get('/organizations/{organization}/attendance', [DailyController::class,'records'])->name('attendance.records');
+    Route::post('/organizations/{organization}/attendance', [DailyController::class,'create'])->name('attendance.create');
+    Route::post('/organizations/{organization}/attendance/{entry}', [DailyController::class,'correct'])->name('attendance.correct');
+    Route::get('/organizations/{organization}/daily-notifications', [DailyController::class,'notifications'])->name('daily.notifications');
+    Route::post('/organizations/{organization}/daily-notifications/{notification}/read', [DailyController::class,'read'])->name('daily.notifications.read');
     Route::get('/organizations/{organization}/my-leave', [LeaveController::class, 'mine'])->name('leave.mine');
     Route::post('/organizations/{organization}/my-leave', [LeaveController::class, 'requestLeave'])->name('leave.request');
     Route::post('/organizations/{organization}/my-leave/{leave}/cancel', [LeaveController::class, 'cancel'])->name('leave.cancel');
