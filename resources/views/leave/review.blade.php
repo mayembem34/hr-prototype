@@ -1,0 +1,5 @@
+@extends('layout')
+@section('content')
+<p><a href="{{ route('organizations.show',$organization) }}">{{ $organization->name }}</a> / Leave requests</p><h1>Leave requests</h1><section>@forelse($requests as $leave)<article style="border-bottom:1px solid #dce4ee;padding:10px 0"><strong>{{ $leave->employee->first_name }} {{ $leave->employee->last_name }}</strong> · {{ $leave->type->name }} · {{ $leave->start_date }} to {{ $leave->end_date }} · {{ $leave->days }} days · {{ ucfirst($leave->status) }}<p>{{ $leave->reason }}</p>
+@if($leave->status==='pending' && app(\App\Services\EmployeeAccess::class)->allows(auth()->user(),$organization,'leave.requests.review',$leave->employee) && (int)$leave->employee->user_id !== (int)auth()->id())<form method="post" action="{{ route('leave.decide',[$organization,$leave]) }}">@csrf<label>Decision note<input name="decision_note" maxlength="2000"></label><button name="decision" value="approved">Approve</button> <button name="decision" value="rejected">Reject</button></form>@endif</article>@empty<p>No leave requests in your scope.</p>@endforelse</section>
+@endsection
