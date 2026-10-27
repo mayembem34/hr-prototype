@@ -1,0 +1,9 @@
+# Invitations, branding and leave
+
+Run `php artisan migrate` after pulling the changes. Configure a real mail transport and sender in `.env` before inviting staff. The default `log` mailer writes messages locally and does not deliver them. New accounts have a randomly generated unusable initial password and require a single-use 48-hour invitation link. Administrators can resend invitations to pending accounts; resending invalidates earlier links. Existing active accounts are not reset by invitations. Issuance, delivery failures and acceptance are recorded. A failed delivery leaves the account pending so an administrator can resend.
+
+Organization branding is applied on organization-specific pages. Text color is selected for contrast against the configured primary and accent colors. An organization can preview and reset its theme colors; platform and sign-in pages use defaults.
+
+Leave types are configured per organization with an annual allowance in calendar days. An employee with a linked profile may request leave; pending and approved requests reserve the allowance, and overlapping requests are rejected. Requests cannot span calendar years. Leave goes first to the immediate supervisor, then to configured approving officers in order. See [LEAVE_APPROVALS.md](LEAVE_APPROVALS.md) for permissions, organization-wide viewing and approval history. Pending requests may be cancelled by the employee.
+
+This first leave workflow counts weekends and public holidays, uses one allowance per type for all staff, and does not calculate accrual, carryover, country-specific rules, split approvals or notifications. Do not treat it as a statutory payroll or leave calculation. Changing a type's allowance also changes its displayed allowance for all years; approved requests remain recorded. Separate sensitive leave categories and medical attachments are not implemented.

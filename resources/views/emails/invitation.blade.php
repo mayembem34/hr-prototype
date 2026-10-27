@@ -1,0 +1,1 @@
+<p>Hello {{ $name }},</p><p>You have been invited to join {{ $organizationName }} on the HR system.</p><p><a href="{{ $url }}">Set up your password</a></p><p>This link expires after 48 hours. If it expires, contact your organization administrator.</p>

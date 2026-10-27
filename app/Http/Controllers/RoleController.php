@@ -67,17 +67,19 @@ class RoleController extends Controller {
     }
     public function addMember(Request $request, Organization $organization) {
         $this->authorizeOp($request, $organization, 'members.add');
-        $data = $request->validate(['name' => 'required|string|max:255', 'email' => 'required|email|max:255', 'password' => 'nullable|string|min:12']);
-        DB::transaction(function () use ($data, $organization, $request) {
-            $user = User::where('email', $data['email'])->first();
+        $data = $request->validate(['name'=>'required|string|max:255','email'=>'required|email|max:255']);
+        $newUser = null;
+        DB::transaction(function () use ($data,$organization,$request,&$newUser) {
+            $user=User::where('email',$data['email'])->first();
             if (! $user) {
-                abort_unless($request->user()->hasPermission('members.accounts.create', $organization), 403);
-                if (empty($data['password'])) throw ValidationException::withMessages(['password' => 'A password is required for a new user.']);
-                $user = User::create(['name' => $data['name'], 'email' => $data['email'], 'password' => $data['password']]);
+                abort_unless($request->user()->hasPermission('members.accounts.create',$organization) && $request->user()->hasPermission('invitations.send',$organization),403);
+                $user=User::create(['name'=>$data['name'],'email'=>$data['email'],'password'=>\Illuminate\Support\Str::random(64)]);
+                $user->must_set_password=true; $user->save(); $newUser=$user;
             }
-            if (! $organization->users()->where('users.id', $user->id)->exists()) $organization->users()->attach($user->id, ['is_admin' => false]);
+            if (! $organization->users()->where('users.id',$user->id)->exists()) $organization->users()->attach($user->id,['is_admin'=>false]);
         });
-        return back()->with('status', 'Member added.');
+        if ($newUser && ! app(\App\Services\AccountInvitations::class)->send($organization,$newUser,$request->user())) return back()->with('status','Account created, but the invitation could not be sent. Check mail configuration and resend it.');
+        return back()->with('status',$newUser ? 'Account created and invitation sent.' : 'Existing member added.');
     }
     public function assign(Request $request, Organization $organization, User $member) {
         $this->authorizeOp($request, $organization, 'assignments.update');

@@ -15,8 +15,12 @@ class SelfProfileTest extends TestCase {
     private function member(Organization $org): User { $u=User::factory()->create(); $org->users()->attach($u,['is_admin'=>false]); return $u; }
     public function test_admin_creates_account_user_logs_in_and_completes_profile(): void {
         $org=Organization::create(['name'=>'Organization']); $admin=$this->admin($org);
-        $this->actingAs($admin)->post('/organizations/'.$org->id.'/members',['name'=>'Alice','email'=>'alice@example.com','password'=>'secret-password-123'])->assertRedirect();
+        \Illuminate\Support\Facades\Mail::fake();
+        $this->actingAs($admin)->post('/organizations/'.$org->id.'/members',['name'=>'Alice','email'=>'alice@example.com'])->assertRedirect();
+        $invited=User::where('email','alice@example.com')->firstOrFail(); $token=str_repeat('a',64);
+        DB::table('account_invitations')->where('user_id',$invited->id)->update(['token_hash'=>hash('sha256',$token)]);
         auth()->logout();
+        $this->post('/invite/'.$token,['password'=>'secret-password-123','password_confirmation'=>'secret-password-123'])->assertRedirect();
         $this->post('/login',['email'=>'alice@example.com','password'=>'secret-password-123'])->assertRedirect('/organizations/'.$org->id.'/my-profile');
         $this->post('/organizations/'.$org->id.'/my-profile',['first_name'=>'Alice','last_name'=>'Jones','phone'=>'123','date_of_birth'=>'1990-01-01','address'=>'Prague','emergency_contact_name'=>'Sam','emergency_contact_phone'=>'456'])->assertRedirect();
         $user=User::where('email','alice@example.com')->firstOrFail();

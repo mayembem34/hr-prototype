@@ -21,6 +21,7 @@ class FoundationController extends Controller {
         $this->publicPermission('session.login');
         $credentials = $request->validate(['email' => 'required|email', 'password' => 'required|string']);
         if (! Auth::attempt($credentials)) throw ValidationException::withMessages(['email' => 'The email or password is incorrect.']);
+        if ($request->user()->must_set_password) { Auth::logout(); $request->session()->invalidate(); $request->session()->regenerateToken(); throw ValidationException::withMessages(['email'=>'Set up your password using your invitation first.']); }
         $request->session()->regenerate();
         $memberships = $request->user()->organizations()->get();
         if ($memberships->count() === 1 && ! \App\Models\Employee::where('organization_id', $memberships->first()->id)->where('user_id', $request->user()->id)->exists()) return redirect()->route('self-profile.show', $memberships->first());
@@ -30,9 +31,10 @@ class FoundationController extends Controller {
     public function index(Request $request) {
         $this->authorizePermission($request, 'organizations.list');
         $profileOrganizations = $request->user()->organizations()->orderBy('name')->get();
+        $profileEmployeeOrganizations = Employee::where('user_id',$request->user()->id)->pluck('organization_id')->all();
         $organizations = $request->user()->is_platform_admin ? Organization::orderBy('name')->get() : $request->user()->organizations()->orderBy('name')->get();
         $organizations = $organizations->filter(fn ($org) => $request->user()->hasPermission('organization.view', $org));
-        return view('home', compact('organizations', 'profileOrganizations'));
+        return view('home', compact('organizations', 'profileOrganizations', 'profileEmployeeOrganizations'));
     }
     public function createOrganization(Request $request) {
         $this->authorizePermission($request, 'organizations.create');
@@ -61,20 +63,24 @@ class FoundationController extends Controller {
             $visited[$current->id] = true; $chart[] = ['unit'=>$current,'level'=>$level];
             foreach ($units->where('parent_id',$current->id)->reverse() as $child) $stack[] = [$child,$level+1];
         }
-        return view('organization', compact('organization', 'units', 'admins', 'roles', 'permissions', 'members', 'assignments', 'headCandidates', 'unitChanges', 'chart'));
+        $invitationEvents = $user->hasPermission('invitations.events.view', $organization)
+            ? DB::table('invitation_events as events')->join('users as targets','targets.id','=','events.user_id')->leftJoin('users as actors','actors.id','=','events.actor_id')->where('events.organization_id',$organization->id)->orderByDesc('events.id')->limit(100)->get(['events.action','events.created_at','targets.name as target_name','actors.name as actor_name']) : collect();
+        return view('organization', compact('organization', 'units', 'admins', 'roles', 'permissions', 'members', 'assignments', 'headCandidates', 'unitChanges', 'chart', 'invitationEvents'));
     }
     public function addAdmin(Request $request, Organization $organization) {
         $this->authorizePermission($request, 'admins.assign', $organization);
-        $data = $request->validate(['name' => 'required|string|max:255', 'email' => 'required|email|max:255', 'password' => 'nullable|string|min:12']);
-        DB::transaction(function () use ($data, $organization) {
-            $user = User::where('email', $data['email'])->first();
+        $data=$request->validate(['name'=>'required|string|max:255','email'=>'required|email|max:255']); $newUser=null;
+        DB::transaction(function () use ($request,$data,$organization,&$newUser) {
+            $user=User::where('email',$data['email'])->first();
             if (! $user) {
-                if (empty($data['password'])) throw ValidationException::withMessages(['password' => 'A password is required for a new user.']);
-                $user = User::create(['name' => $data['name'], 'email' => $data['email'], 'password' => $data['password']]);
+                $this->authorizePermission($request,'members.accounts.create',$organization); $this->authorizePermission($request,'invitations.send',$organization);
+                $user=User::create(['name'=>$data['name'],'email'=>$data['email'],'password'=>\Illuminate\Support\Str::random(64)]);
+                $user->must_set_password=true; $user->save(); $newUser=$user;
             }
-            $organization->users()->syncWithoutDetaching([$user->id => ['is_admin' => true]]);
+            $organization->users()->syncWithoutDetaching([$user->id=>['is_admin'=>true]]);
         });
-        return back()->with('status', 'Organization administrator assigned.');
+        if ($newUser && ! app(\App\Services\AccountInvitations::class)->send($organization,$newUser,$request->user())) return back()->with('status','Administrator created, but the invitation failed. Check mail configuration and resend it.');
+        return back()->with('status',$newUser?'Administrator assigned and invitation sent.':'Organization administrator assigned.');
     }
     public function createUnit(Request $request, Organization $organization) {
         $this->authorizePermission($request, 'units.create', $organization);
@@ -128,6 +134,11 @@ class FoundationController extends Controller {
             $this->recordUnitChange($request,$organization,$unit,'head_changed',$old === null ? null : (string)$old,$headId === null ? null : (string)$headId);
         });
         return back()->with('status','Unit head updated.');
+    }
+    public function resetBranding(Request $request, Organization $organization) {
+        $this->authorizePermission($request, 'branding.update', $organization);
+        $organization->update(['primary_color'=>'#2459a6','accent_color'=>'#12856f']);
+        return back()->with('status','Theme colors restored to defaults.');
     }
     public function branding(Request $request, Organization $organization) {
         $this->authorizePermission($request, 'branding.update', $organization);

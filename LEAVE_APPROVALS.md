@@ -1,0 +1,11 @@
+# Leave approvals
+
+Run `php artisan migrate` after deploying. The new organization-wide `leave.requests.view_all` permission provides access to all applications and their recorded approval history. It does not itself allow a user to make a decision. HR Manager roles receive this viewing permission and the approving-officer permission; an administrator must still add the relevant users to the officer sequence.
+
+A leave request goes to the employee's immediate supervisor first. The employee must have an assigned supervisor with a user account in the organization. The supervisor needs `leave.requests.supervisor_approve` with a scope covering that employee. At decision time the system checks the current reporting relationship and the permission; a supervisor cannot approve their own request.
+
+Administrators can configure zero or more approving officers with `leave.approvers.manage`, and `leave.approvers.view` controls the configuration screen. Each selected officer must have `leave.requests.officer_approve`. The system follows them in configured order after the supervisor. If no officers are configured for an application, supervisor approval completes it. Approval and rejection record the actor, stage, decision and optional note. A rejection stops the route.
+
+The officer sequence is captured when a request is submitted. Configuration changes affect future requests, not those already submitted. Users who have `leave.approvers.manage` and organization-wide leave viewing can add an officer to an individual application while it is pending. Requests cannot be modified this way after final approval or rejection. If an assigned officer loses their account or permission while a request is pending, an administrator must restore their access; replacement of an already-pending step is not yet available.
+
+The migration converts earlier pending requests to supervisor approval and creates a supervisor step using the assigned supervisor account where available. If none was assigned, assign a supervisor with an account and the supervisor approval permission. Earlier decisions predate the new event history. Calendar-day and allowance limitations remain as described in DAILY_OPERATIONS.md.
