@@ -38,7 +38,7 @@ class DailyOperationsTest extends TestCase {
         $this->post('/organizations/'.$org->id.'/branding/reset')->assertRedirect();$this->assertSame('#2459a6',$org->fresh()->primary_color);
     }
     public function test_leave_request_approval_and_allowance_are_enforced(): void {
-        $org=Organization::create(['name'=>'A']);$admin=$this->admin($org);$user=$this->member($org);$employee=$this->employee($org,$user);
+        $org=Organization::create(['name'=>'A']);$admin=$this->admin($org);$user=$this->member($org);$employee=$this->employee($org,$user);$supervisor=$this->employee($org,$admin);$employee->manager_id=$supervisor->id;$employee->save();
         $this->actingAs($admin)->post('/organizations/'.$org->id.'/leave-types',['name'=>'Annual','annual_days'=>5])->assertRedirect();$type=LeaveType::where('organization_id',$org->id)->firstOrFail();
         $this->actingAs($user)->post('/organizations/'.$org->id.'/my-leave',['leave_type_id'=>$type->id,'start_date'=>'2027-01-01','end_date'=>'2027-01-03'])->assertRedirect();
         $leave=LeaveRequest::where('employee_id',$employee->id)->firstOrFail();$this->assertSame(3,$leave->days);
@@ -47,7 +47,7 @@ class DailyOperationsTest extends TestCase {
         $this->actingAs($user)->post('/organizations/'.$org->id.'/my-leave/'.$leave->id.'/cancel')->assertStatus(422);
     }
     public function test_leave_cannot_be_approved_by_self_or_cross_organization(): void {
-        $a=Organization::create(['name'=>'A']);$b=Organization::create(['name'=>'B']);$admin=$this->admin($a);$other=$this->admin($b);$employee=$this->employee($a,$admin);
+        $a=Organization::create(['name'=>'A']);$b=Organization::create(['name'=>'B']);$admin=$this->admin($a);$other=$this->admin($b);$employee=$this->employee($a,$admin); $supervisorUser=$this->member($a); $supervisor=$this->employee($a,$supervisorUser); $employee->manager_id=$supervisor->id; $employee->save();
         $type=new LeaveType(['name'=>'Annual','annual_days'=>10]);$type->organization_id=$a->id;$type->save();
         $this->actingAs($admin)->post('/organizations/'.$a->id.'/my-leave',['leave_type_id'=>$type->id,'start_date'=>'2027-03-01','end_date'=>'2027-03-01'])->assertRedirect();$leave=LeaveRequest::where('employee_id',$employee->id)->firstOrFail();
         $this->actingAs($admin)->post('/organizations/'.$a->id.'/leave-requests/'.$leave->id.'/decision',['decision'=>'approved'])->assertForbidden();
@@ -55,9 +55,9 @@ class DailyOperationsTest extends TestCase {
     }
     public function test_unit_scoped_reviewer_cannot_view_or_approve_other_units(): void {
         $org=Organization::create(['name'=>'A']); $unitA=$org->units()->create(['name'=>'Unit A']); $unitB=$org->units()->create(['name'=>'Unit B']);
-        $reviewer=$this->member($org); $staffA=$this->member($org); $staffB=$this->member($org); $employeeA=$this->employee($org,$staffA); $employeeB=$this->employee($org,$staffB); $employeeA->unit_id=$unitA->id; $employeeA->save(); $employeeB->unit_id=$unitB->id; $employeeB->save();
+        $reviewer=$this->member($org); $staffA=$this->member($org); $staffB=$this->member($org); $employeeA=$this->employee($org,$staffA); $employeeB=$this->employee($org,$staffB); $supervisor=$this->employee($org,$reviewer); $employeeA->manager_id=$supervisor->id; $employeeB->manager_id=$supervisor->id; $employeeA->unit_id=$unitA->id; $employeeA->save(); $employeeB->unit_id=$unitB->id; $employeeB->save();
         $role=new Role(['name'=>'Reviewer']); $role->organization_id=$org->id; $role->save();
-        foreach (['leave.requests.view','leave.requests.review'] as $key) $role->permissions()->attach(Permission::where('key',$key)->value('id'),['access_scope'=>'unit','unit_id'=>$unitA->id]);
+        foreach (['leave.requests.view','leave.requests.supervisor_approve'] as $key) $role->permissions()->attach(Permission::where('key',$key)->value('id'),['access_scope'=>'unit','unit_id'=>$unitA->id]);
         DB::table('organization_role_user')->insert(['organization_id'=>$org->id,'role_id'=>$role->id,'user_id'=>$reviewer->id]);
         $type=new LeaveType(['name'=>'Annual','annual_days'=>10]);$type->organization_id=$org->id;$type->save();
         $this->actingAs($staffA)->post('/organizations/'.$org->id.'/my-leave',['leave_type_id'=>$type->id,'start_date'=>'2027-04-01','end_date'=>'2027-04-01'])->assertRedirect();

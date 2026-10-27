@@ -31,7 +31,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/organizations/{organization}/leave-types', [LeaveController::class, 'manage'])->name('leave.types');
     Route::post('/organizations/{organization}/leave-types', [LeaveController::class, 'createType'])->name('leave.types.create');
     Route::post('/organizations/{organization}/leave-types/{type}', [LeaveController::class, 'updateType'])->name('leave.types.update');
+    Route::get('/organizations/{organization}/leave-officers', [LeaveController::class, 'reviewers'])->name('leave.officers');
+    Route::post('/organizations/{organization}/leave-officers', [LeaveController::class, 'addOfficer'])->name('leave.officers.add');
+    Route::delete('/organizations/{organization}/leave-officers/{member}', [LeaveController::class, 'removeOfficer'])->name('leave.officers.remove');
     Route::get('/organizations/{organization}/leave-requests', [LeaveController::class, 'reviews'])->name('leave.reviews');
+    Route::post('/organizations/{organization}/leave-requests/{leave}/officers', [LeaveController::class, 'addOfficerToRequest'])->name('leave.request.officer');
     Route::post('/organizations/{organization}/leave-requests/{leave}/decision', [LeaveController::class, 'decide'])->name('leave.decide');
     Route::post('/organizations/{organization}/members', [RoleController::class, 'addMember'])->name('members.add');
     Route::post('/organizations/{organization}/members/{member}/roles', [RoleController::class, 'assign'])->name('assignments.update');
