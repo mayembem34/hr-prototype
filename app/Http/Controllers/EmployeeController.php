@@ -93,7 +93,7 @@ class EmployeeController extends Controller {
     public function linkAccount(Request $request, Organization $organization, Employee $employee) {
         $this->authorizeEmployee($request, $organization, 'employees.accounts.assign'); $this->own($organization, $employee);
         abort_unless(app(EmployeeAccess::class)->allows($request->user(), $organization, 'employees.view', $employee), 403);
-        $data = $request->validate(['user_id'=>['nullable','integer', Rule::exists('organization_user','user_id')->where('organization_id',$organization->id)]]);
+        $data = $request->validate(['user_id'=>['nullable','integer', Rule::exists('organization_user','user_id')->where('organization_id',$organization->id)->where('is_active',true)]]);
         DB::transaction(function () use ($organization,$employee,$request,$data) {
             Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();
             $employee->refresh(); $id=$data['user_id'] ?? null;

@@ -76,7 +76,9 @@ class RoleController extends Controller {
                 $user=User::create(['name'=>$data['name'],'email'=>$data['email'],'password'=>\Illuminate\Support\Str::random(64)]);
                 $user->must_set_password=true; $user->save(); $newUser=$user;
             }
-            if (! $organization->users()->where('users.id',$user->id)->exists()) $organization->users()->attach($user->id,['is_admin'=>false]);
+            $existing=DB::table('organization_user')->where('organization_id',$organization->id)->where('user_id',$user->id)->first();
+            if($existing && !$existing->is_active) { abort_unless($request->user()->hasPermission('members.reactivate',$organization),403);DB::table('organization_user')->where('id',$existing->id)->update(['is_active'=>true,'is_admin'=>false,'updated_at'=>now()]); }
+            elseif(!$existing)$organization->users()->attach($user->id,['is_admin'=>false]);
         });
         if ($newUser && ! app(\App\Services\AccountInvitations::class)->send($organization,$newUser,$request->user())) return back()->with('status','Account created, but the invitation could not be sent. Check mail configuration and resend it.');
         return back()->with('status',$newUser ? 'Account created and invitation sent.' : 'Existing member added.');

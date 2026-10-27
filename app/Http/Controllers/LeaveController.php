@@ -94,7 +94,7 @@ class LeaveController extends Controller {
     }
     public function addOfficer(Request $request,Organization $organization) {
         $this->op($request,$organization,'leave.approvers.manage');
-        $data=$request->validate(['user_id'=>['required','integer',Rule::exists('organization_user','user_id')->where('organization_id',$organization->id),Rule::unique('leave_approving_officers','user_id')->where('organization_id',$organization->id)],'position'=>['required','integer','min:1','max:9999',Rule::unique('leave_approving_officers','position')->where('organization_id',$organization->id)]]);
+        $data=$request->validate(['user_id'=>['required','integer',Rule::exists('organization_user','user_id')->where('organization_id',$organization->id)->where('is_active',true),Rule::unique('leave_approving_officers','user_id')->where('organization_id',$organization->id)],'position'=>['required','integer','min:1','max:9999',Rule::unique('leave_approving_officers','position')->where('organization_id',$organization->id)]]);
         $user=\App\Models\User::findOrFail($data['user_id']);
         if (! $user->hasPermission('leave.requests.officer_approve',$organization)) throw ValidationException::withMessages(['user_id'=>'The selected user needs the approving officer permission.']);
         DB::transaction(function () use ($organization,$data) { Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail(); DB::table('leave_approving_officers')->insert(['organization_id'=>$organization->id,'user_id'=>$data['user_id'],'position'=>$data['position'],'created_at'=>now(),'updated_at'=>now()]); });
@@ -127,7 +127,7 @@ class LeaveController extends Controller {
     public function addOfficerToRequest(Request $request,Organization $organization,LeaveRequest $leave) {
         $this->op($request,$organization,'leave.approvers.manage'); $this->op($request,$organization,'leave.requests.view_all');
         abort_unless((int)$leave->organization_id===(int)$organization->id,404);
-        $data=$request->validate(['user_id'=>['required','integer',Rule::exists('organization_user','user_id')->where('organization_id',$organization->id)]]);
+        $data=$request->validate(['user_id'=>['required','integer',Rule::exists('organization_user','user_id')->where('organization_id',$organization->id)->where('is_active',true)]]);
         DB::transaction(function () use ($request,$organization,$leave,$data) {
             Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();
             $leave=LeaveRequest::whereKey($leave->id)->lockForUpdate()->firstOrFail();

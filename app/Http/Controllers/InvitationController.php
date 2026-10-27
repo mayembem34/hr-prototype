@@ -15,9 +15,14 @@ class InvitationController extends Controller {
     }
     public function accept(Request $request,string $token) {
         $this->publicAccess(); abort_unless(strlen($token)===64,404); $data=$request->validate(['password'=>'required|string|min:12|confirmed']);
-        DB::transaction(function () use ($token,$data) {
+        $invitationOrganization=DB::table('account_invitations')->where('token_hash',hash('sha256',$token))->value('organization_id');
+        abort_unless($invitationOrganization,404);
+        DB::transaction(function () use ($token,$data,$invitationOrganization) {
+            Organization::whereKey($invitationOrganization)->lockForUpdate()->firstOrFail();
             $invite=DB::table('account_invitations')->where('token_hash',hash('sha256',$token))->whereNull('used_at')->where('expires_at','>',now())->lockForUpdate()->first();
-            abort_unless($invite,404); $user=User::whereKey($invite->user_id)->lockForUpdate()->firstOrFail(); abort_unless($user->must_set_password,404);
+            abort_unless($invite && (int)$invite->organization_id===(int)$invitationOrganization,404);
+            abort_unless(DB::table('organization_user')->where('organization_id',$invite->organization_id)->where('user_id',$invite->user_id)->where('is_active',true)->exists(),404);
+            $user=User::whereKey($invite->user_id)->lockForUpdate()->firstOrFail(); abort_unless($user->must_set_password,404);
             $user->password=Hash::make($data['password']); $user->must_set_password=false; $user->email_verified_at=now(); $user->save();
             DB::table('account_invitations')->where('user_id',$user->id)->whereNull('used_at')->update(['used_at'=>now(),'updated_at'=>now()]);
             DB::table('invitation_events')->insert(['organization_id'=>$invite->organization_id,'user_id'=>$user->id,'actor_id'=>$user->id,'action'=>'accepted','created_at'=>now(),'updated_at'=>now()]);

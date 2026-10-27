@@ -10,6 +10,8 @@ class AccountInvitations {
     public function send(Organization $organization, User $user, User $actor): bool {
         $token=Str::random(64);
         DB::transaction(function () use ($organization,$user,$actor,$token) {
+            Organization::whereKey($organization->id)->lockForUpdate()->firstOrFail();
+            abort_unless(DB::table('organization_user')->where('organization_id',$organization->id)->where('user_id',$user->id)->where('is_active',true)->exists(),403);
             $locked = User::whereKey($user->id)->lockForUpdate()->firstOrFail();
             abort_unless($locked->must_set_password, 422, 'This account is already active.');
             DB::table('account_invitations')->where('user_id',$user->id)->whereNull('used_at')->delete();
